@@ -4,5 +4,5 @@
 repo = "local"
 hooks = [
   { id = "stylua", name = "stylua", language = "system", entry = "stylua --check", files = "\\.lua$", pass_filenames = true },
-  { id = "lua-ls", name = "lua-ls", language = "system", entry = "lua-language-server --check=. --checkformat=pretty --checklevel=Warning", files = "\\.lua$", pass_filenames = false },
+  { id = "selene", name = "selene", language = "system", entry = "selene", files = "\\.lua$", pass_filenames = false },
 ]
