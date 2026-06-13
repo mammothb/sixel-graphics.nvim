@@ -151,4 +151,61 @@ function M.get_dimensions(path)
   return { width = tonumber(w), height = tonumber(h) }
 end
 
+----------------------------------------------------------------------
+-- Phase 2.4: encode_to_sixel
+----------------------------------------------------------------------
+
+-- Shell-escape a path for use inside single-quoted string.
+-- Escapes embedded single quotes: ' → '\''
+local function shell_escape(path)
+  return "'" .. path:gsub("'", "'\\''") .. "'"
+end
+
+---Encode an image file to raw sixel bytes via ImageMagick.
+---Resizes to the requested pixel dimensions during encoding.
+---Returns raw sixel data already DCS-wrapped by ImageMagick (includes \ePq...\e\).
+---@param path string      Absolute or relative path to image file
+---@param width? number    Target pixel width (nil = original size)
+---@param height? number   Target pixel height (nil = original size)
+---@return string|nil      Raw sixel data, or nil on failure
+function M.encode_to_sixel(path, width, height)
+  if not has_magick and not has_convert then
+    vim.notify("sixel-graphics: ImageMagick not found (need 'magick' or 'convert')", vim.log.levels.WARN)
+    return nil
+  end
+  if not path or path == "" then
+    vim.notify("sixel-graphics: encode_to_sixel called with empty path", vim.log.levels.WARN)
+    return nil
+  end
+  if vim.fn.filereadable(path) == 0 then
+    vim.notify("sixel-graphics: file not readable: " .. path, vim.log.levels.WARN)
+    return nil
+  end
+
+  -- Determine the encoding command (v7: magick, v6: convert)
+  local cmd_bin = has_magick and "magick" or "convert"
+
+  -- Build shell command string (string-form required because sixel:- is output spec)
+  local cmd
+  if width and height then
+    cmd = string.format("%s %s -resize %dx%d sixel:-", cmd_bin, shell_escape(path), width, height)
+  else
+    cmd = string.format("%s %s sixel:-", cmd_bin, shell_escape(path))
+  end
+
+  local output = vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 then
+    local err = output:gsub("%s+$", "")
+    vim.notify("sixel-graphics: encode to sixel failed for " .. path .. ": " .. err, vim.log.levels.WARN)
+    return nil
+  end
+
+  if not output or output == "" then
+    vim.notify("sixel-graphics: encode_to_sixel produced empty output for " .. path, vim.log.levels.WARN)
+    return nil
+  end
+
+  return output
+end
+
 return M
