@@ -93,4 +93,62 @@ function M.get_format(path)
   return format
 end
 
+----------------------------------------------------------------------
+-- Phase 2.3: get_dimensions
+----------------------------------------------------------------------
+
+---Returns pixel dimensions of an image.
+---Uses identify -format %wx%h (v6) or magick identify -format %wx%h (v7).
+---For GIF files, reads dimensions of the first frame only (appends [0]).
+---@param path string  Absolute or relative path to image file
+---@return { width: number, height: number }|nil  Dimensions, or nil on failure
+function M.get_dimensions(path)
+  if not has_magick and not has_identify then
+    vim.notify("sixel-graphics: ImageMagick 'identify' command not found", vim.log.levels.WARN)
+    return nil
+  end
+  if not path or path == "" then
+    vim.notify("sixel-graphics: get_dimensions called with empty path", vim.log.levels.WARN)
+    return nil
+  end
+  if vim.fn.filereadable(path) == 0 then
+    vim.notify("sixel-graphics: file not readable: " .. path, vim.log.levels.WARN)
+    return nil
+  end
+
+  -- GIF: read first frame only (avoid reading all frames)
+  local format = M.get_format(path)
+  if not format then
+    return nil
+  end
+  local identify_path = path
+  if format == "gif" then
+    identify_path = path .. "[0]"
+  end
+
+  -- Build command (list form avoids shell injection)
+  local cmd
+  if has_magick then
+    cmd = { "magick", "identify", "-format", "%wx%h", identify_path }
+  else
+    cmd = { "identify", "-format", "%wx%h", identify_path }
+  end
+
+  local output = vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 then
+    local err = output:gsub("%s+$", "")
+    vim.notify("sixel-graphics: identify dimensions failed for " .. identify_path .. ": " .. err, vim.log.levels.WARN)
+    return nil
+  end
+
+  -- Parse WxH
+  local w, h = output:match("^(%d+)x(%d+)")
+  if not w or not h then
+    vim.notify("sixel-graphics: could not parse dimensions from: " .. output:gsub("%s+$", ""), vim.log.levels.WARN)
+    return nil
+  end
+
+  return { width = tonumber(w), height = tonumber(h) }
+end
+
 return M
