@@ -3,6 +3,6 @@
 [[repos]]
 repo = "local"
 hooks = [
-  { id = "stylua", name = "stylua", language = "system", entry = "stylua --check", files = "\\.lua$", pass_filenames = true },
+  { id = "stylua", name = "stylua", language = "system", entry = "stylua", files = "\\.lua$", pass_filenames = true },
   { id = "selene", name = "selene", language = "system", entry = "selene", files = "\\.lua$", pass_filenames = true },
 ]
