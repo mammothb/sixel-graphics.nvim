@@ -15,6 +15,8 @@ M.defaults = {
   max_height = nil,
   scale = 1.0,
   y_offset = 0,
+  cell_width_override = nil,   -- force cell width in pixels (overrides TIOCGWINSZ)
+  cell_height_override = nil,  -- force cell height in pixels (overrides TIOCGWINSZ)
 }
 
 ---@param opts Config?

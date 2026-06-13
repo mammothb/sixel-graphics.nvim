@@ -66,10 +66,26 @@ end
 update_size()
 vim.api.nvim_create_autocmd("VimResized", { callback = update_size })
 
----Return the current terminal cell size.
+---Return the effective cell size, respecting user overrides from config.
+---Overrides only affect cell_width/cell_height; screen dimensions remain from TIOCGWINSZ.
 ---@return { cell_width: number, cell_height: number, screen_cols: number, screen_rows: number, screen_x?: number, screen_y?: number }|nil
 function M.get_size()
-  return cached_size
+  if not cached_size then
+    return nil
+  end
+
+  local config = require("sixel-graphics.config")
+  local cw = config.cell_width_override or cached_size.cell_width
+  local ch = config.cell_height_override or cached_size.cell_height
+
+  return {
+    cell_width = cw,
+    cell_height = ch,
+    screen_cols = cached_size.screen_cols,
+    screen_rows = cached_size.screen_rows,
+    screen_x = cached_size.screen_x,
+    screen_y = cached_size.screen_y,
+  }
 end
 
 return M
