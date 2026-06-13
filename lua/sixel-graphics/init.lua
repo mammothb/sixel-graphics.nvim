@@ -26,6 +26,7 @@ function M.setup(opts)
   -- Initialize shared state
   M.state = {
     images = {},
+    enabled = require("sixel-graphics.config").options.enabled,
     term_size = require("sixel-graphics.utils.term").get_size(),
     options = require("sixel-graphics.config").options,
   }
@@ -91,6 +92,11 @@ function M.render_image_at_cursor(path, width_cells)
 
   guard_setup()
 
+  if not M.state.enabled then
+    vim.notify("sixel-graphics: rendering is disabled. Call enable() or setup().", vim.log.levels.WARN)
+    return false
+  end
+
   local proc = require("sixel-graphics.processors.magick_cli")
   local backend = require("sixel-graphics.backends.sixel")
   local term = require("sixel-graphics.utils.term").get_size()
@@ -129,6 +135,36 @@ end
 ---@return Config
 function M.config()
   return require("sixel-graphics.config").options
+end
+
+---Check whether image rendering is currently enabled.
+---@return boolean
+function M.is_enabled()
+  return M.has_setup and M.state and M.state.enabled == true
+end
+
+---Enable image rendering (show images).
+---Re-renders all currently tracked images.
+function M.enable()
+  guard_setup()
+  M.state.enabled = true
+  -- Re-render all tracked images
+  for _, img in pairs(M.state.images) do
+    if img.is_rendered then
+      require("sixel-graphics.backends.sixel").render(
+        img.path, img.x, img.y, img.width, img.height
+      )
+    end
+  end
+  vim.notify("sixel-graphics: enabled", vim.log.levels.INFO)
+end
+
+---Disable image rendering (hide images).
+---Images persist on screen until terminal redraw (Ctrl-L, scroll).
+function M.disable()
+  guard_setup()
+  M.state.enabled = false
+  vim.notify("sixel-graphics: disabled", vim.log.levels.INFO)
 end
 
 return M
