@@ -52,6 +52,22 @@ function M.is_tmux()
   return vim.env.TMUX ~= nil
 end
 
+---Get the tmux pane's offset (in character cells) within the outer terminal.
+---Returns { 0, 0 } when not in tmux.
+---@return number x  Left offset
+---@return number y  Top offset
+function M.get_tmux_pane_offset()
+  if not M.is_tmux() then
+    return 0, 0
+  end
+  local ok, result = pcall(vim.fn.system, { "tmux", "display-message", "-p", "#{pane_left} #{pane_top}" })
+  if not ok or not result then
+    return 0, 0
+  end
+  local left, top = result:match("(%d+)%s+(%d+)")
+  return tonumber(left) or 0, tonumber(top) or 0
+end
+
 ---Wrap a DCS sequence for tmux passthrough so the outer terminal receives it.
 ---Doubles all ESC bytes to prevent tmux from interpreting them.
 ---@param data string  Complete DCS sequence (including \eP intro and \e\\ terminator)
@@ -95,6 +111,13 @@ function M.send_sixel(sixel_data, x, y)
   local seq = "\27[s" -- save cursor position
 
   if x and y then
+    -- Inside tmux: pane coordinates are relative; add pane offset
+    -- so the outer terminal cursor lands at the correct position.
+    if M.is_tmux() then
+      local px, py = M.get_tmux_pane_offset()
+      x = x + px
+      y = y + py
+    end
     -- CSI y;xH (cursor position, 1-indexed)
     seq = seq .. string.format("\27[%d;%dH", y + 1, x + 1)
   end
@@ -134,6 +157,15 @@ function M.send_test_sixel(x, y)
     .. "$#2" .. row .. "#3" .. row
 
   M.send_sixel(test_image, x, y)
+end
+
+---Send the test pattern at the current Neovim cursor position.
+---Converts Neovim's (1-indexed row, 0-indexed col) to terminal coordinates.
+function M.send_test_sixel_at_cursor()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local row = cursor[1] - 1 -- 1-indexed → 0-indexed
+  local col = cursor[2]
+  M.send_test_sixel(col, row)
 end
 
 return M
