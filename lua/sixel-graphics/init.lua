@@ -3,6 +3,13 @@
 ---@field state table
 local M = { has_setup = false, state = nil }
 
+---@private
+local function guard_setup()
+  if not M.has_setup then
+    error("sixel-graphics.nvim is not set up. Call require('sixel-graphics').setup() first.")
+  end
+end
+
 ---Setup sixel-graphics.nvim with optional configuration.
 ---
 ---```lua
@@ -41,6 +48,7 @@ function M.is_sixel_supported()
 end
 
 ---Send a hardcoded 4-color sixel test pattern for visual verification.
+---@deprecated Use render_image_at_cursor instead
 ---@param x? number  Terminal column (0-indexed)
 ---@param y? number  Terminal row (0-indexed)
 function M.send_test_sixel(x, y)
@@ -48,6 +56,7 @@ function M.send_test_sixel(x, y)
 end
 
 ---Send the test pattern at the current Neovim cursor position.
+---@deprecated Use render_image_at_cursor instead
 function M.send_test_sixel_at_cursor()
   require("sixel-graphics.backends.sixel").send_test_sixel_at_cursor()
 end
@@ -80,10 +89,7 @@ end
 function M.render_image_at_cursor(path, width_cells)
   width_cells = width_cells or 40
 
-  if not M.has_setup then
-    vim.notify("sixel-graphics: not set up. Call require('sixel-graphics').setup() first.", vim.log.levels.ERROR)
-    return false
-  end
+  guard_setup()
 
   local proc = require("sixel-graphics.processors.magick_cli")
   local backend = require("sixel-graphics.backends.sixel")
@@ -112,8 +118,17 @@ end
 ---Clear all rendered images from tracking state.
 ---Sixel images persist on screen until terminal redraw (Ctrl-L, scroll, etc.).
 function M.clear_images()
+  guard_setup()
   require("sixel-graphics.backends.sixel").clear()
   vim.notify("Images cleared", vim.log.levels.INFO)
+end
+
+---Accessor for the current config options.
+---Returns a reference to the active options table (modifications may be
+---lost on next setup() call).
+---@return Config
+function M.config()
+  return require("sixel-graphics.config").options
 end
 
 return M
