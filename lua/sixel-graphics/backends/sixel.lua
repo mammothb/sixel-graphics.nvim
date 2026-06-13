@@ -2,6 +2,9 @@
 ---@class SixelBackend
 local M = {}
 
+-- Backend state (set during setup)
+M.state = nil
+
 ---Check whether tmux reports the outer terminal as sixel-capable.
 ---Uses tmux's built-in feature detection (client_termfeatures).
 ---This is the most reliable check inside tmux — no hardcoded terminal lists.
@@ -91,6 +94,8 @@ end
 
 ---Send sixel image data to the terminal via stderr.
 ---Handles DCS wrapping, tmux passthrough, cursor save/restore, and positioning.
+---Inside tmux, the entire escape sequence (cursor ops + sixel) is wrapped
+---in tmux passthrough so all of it targets the outer terminal.
 ---@param sixel_data string  Raw sixel bytes (with or without DCS/ST wrappers)
 ---@param x? number  Terminal column (0-indexed). If nil, renders at current cursor.
 ---@param y? number  Terminal row (0-indexed). If nil, renders at current cursor.
@@ -102,13 +107,8 @@ function M.send_sixel(sixel_data, x, y)
   -- Wrap in DCS if needed
   local dcs = ensure_dcs(sixel_data)
 
-  -- Wrap in tmux passthrough if needed
-  if M.is_tmux() then
-    dcs = tmux_wrap(dcs)
-  end
-
-  -- Build the full escape sequence
-  local seq = "\27[s" -- save cursor position
+  -- Build the inner escape sequence (SCP + position + sixel + RCP)
+  local inner = "\27[s" -- save cursor position
 
   if x and y then
     -- Inside tmux: pane coordinates are relative; add pane offset
@@ -119,14 +119,20 @@ function M.send_sixel(sixel_data, x, y)
       y = y + py
     end
     -- CSI y;xH (cursor position, 1-indexed)
-    seq = seq .. string.format("\27[%d;%dH", y + 1, x + 1)
+    inner = inner .. string.format("\27[%d;%dH", y + 1, x + 1)
   end
 
-  seq = seq .. dcs
-  seq = seq .. "\27[u" -- restore cursor position
+  inner = inner .. dcs
+  inner = inner .. "\27[u" -- restore cursor position
+
+  -- Inside tmux: wrap the entire inner sequence in passthrough
+  -- so cursor positioning and sixel both target the outer terminal.
+  if M.is_tmux() then
+    inner = tmux_wrap(inner)
+  end
 
   -- Send via stderr (does not modify buffer contents)
-  vim.fn.chansend(vim.v.stderr, seq)
+  vim.fn.chansend(vim.v.stderr, inner)
 end
 
 ---Send a hardcoded 4-color sixel test pattern.
@@ -166,6 +172,90 @@ function M.send_test_sixel_at_cursor()
   local row = cursor[1] - 1 -- 1-indexed → 0-indexed
   local col = cursor[2]
   M.send_test_sixel(col, row)
+end
+
+----------------------------------------------------------------------
+-- Phase 3.2: setup() + render()
+----------------------------------------------------------------------
+
+---Initialize the sixel backend with a shared state table.
+---Called once by the plugin setup process.
+---@param state table  Shared state: { images: table }
+function M.setup(state)
+  M.state = state
+
+  -- Validate ImageMagick
+  if vim.fn.executable("magick") == 0 and vim.fn.executable("convert") == 0 then
+    vim.notify(
+      "sixel-graphics: ImageMagick not found. Install ImageMagick with sixel support.",
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  -- Warn about tmux
+  if M.is_tmux() then
+    vim.notify(
+      "sixel-graphics: running inside tmux. Ensure allow-passthrough is enabled.",
+      vim.log.levels.WARN
+    )
+  end
+end
+
+---Render an image file at the given cell position and dimensions.
+---Converts cell dimensions to pixels using terminal metrics,
+---encodes to sixel via ImageMagick, and sends to the terminal.
+---@param image_path string  Absolute path to image file
+---@param x number           Terminal column (0-indexed) — top-left corner
+---@param y number           Terminal row (0-indexed) — top-left corner
+---@param width_cells number Width in character cells
+---@param height_cells number Height in character cells
+---@return string|nil image_id  Unique id if rendered successfully, nil on failure
+function M.render(image_path, x, y, width_cells, height_cells)
+  if not M.state then
+    vim.notify(
+      "sixel-graphics: backend not set up. Call require('sixel-graphics').setup() first.",
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  local term_size = require("sixel-graphics.utils.term").get_size()
+  if not term_size or not term_size.cell_width then
+    vim.notify(
+      "sixel-graphics: cannot determine terminal cell size",
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  -- Convert cell dimensions → pixel dimensions
+  local pixel_w = math.floor(width_cells * term_size.cell_width + 0.5)
+  local pixel_h = math.floor(height_cells * term_size.cell_height + 0.5)
+
+  -- Encode via ImageMagick
+  local proc = require("sixel-graphics.processors.magick_cli")
+  local sixel_data = proc.encode_to_sixel(image_path, pixel_w, pixel_h)
+  if not sixel_data then
+    return nil
+  end
+
+  -- Send to terminal
+  M.send_sixel(sixel_data, x, y)
+
+  -- Track image in state
+  local image_id = image_path .. "@" .. tostring(x) .. "," .. tostring(y)
+  M.state.images[image_id] = {
+    id = image_id,
+    path = image_path,
+    x = x,
+    y = y,
+    width = width_cells,
+    height = height_cells,
+    is_rendered = true,
+  }
+
+  return image_id
 end
 
 return M
