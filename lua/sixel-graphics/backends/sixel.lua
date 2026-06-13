@@ -258,4 +258,33 @@ function M.render(image_path, x, y, width_cells, height_cells)
   return image_id
 end
 
+----------------------------------------------------------------------
+-- Phase 3.3: clear()
+----------------------------------------------------------------------
+
+---Clear rendered images from the terminal.
+---Sixel images are persistent on screen until overwritten by terminal redraw.
+---Clearing removes them from our tracking state. A future frame paint
+---(Step 6+) will repaint the screen without them.
+---For now, the terminal will overwrite the sixel region on next redraw
+---(scroll, mode change, Ctrl-L).
+---@param image_id? string  Specific image to clear, or nil to clear all
+function M.clear(image_id)
+  if not M.state then return end
+
+  if image_id then
+    local img = M.state.images[image_id]
+    if img then
+      img.is_rendered = false
+      M.state.images[image_id] = nil
+    end
+  else
+    -- Clear all
+    for _, img in pairs(M.state.images) do
+      img.is_rendered = false
+    end
+    M.state.images = {}
+  end
+end
+
 return M
