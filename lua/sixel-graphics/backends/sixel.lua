@@ -193,11 +193,12 @@ function M.setup(state)
     return
   end
 
-  -- Warn about tmux
-  if M.is_tmux() then
+  -- Check tmux passthrough
+  if M.is_tmux() and not M.tmux_has_passthrough() then
     vim.notify(
-      "sixel-graphics: running inside tmux. Ensure allow-passthrough is enabled.",
-      vim.log.levels.WARN
+      "sixel-graphics: running inside tmux but allow-passthrough is off. "
+      .. "Enable it with: tmux set allow-passthrough on",
+      vim.log.levels.ERROR
     )
   end
 end
