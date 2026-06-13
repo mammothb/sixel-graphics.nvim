@@ -1,20 +1,33 @@
 ---Tests for init.lua state machine: guard_setup error,
 ---enable/disable/is_enabled transitions, clear_images delegation.
+---@diagnostic disable: assign-type-mismatch
 
 -- Pre-load mocks to prevent side effects during init.lua loading
 package.loaded["sixel-graphics.backends.sixel"] = {
   setup = function() end,
   clear = function() end,
-  render = function() return "test-id" end,
-  is_sixel_supported = function() return true end,
+  render = function()
+    return "test-id"
+  end,
+  is_sixel_supported = function()
+    return true
+  end,
 }
 package.loaded["sixel-graphics.utils.term"] = {
-  get_size = function() return { cell_width = 10, cell_height = 20, screen_cols = 80, screen_rows = 24 } end,
+  get_size = function()
+    return { cell_width = 10, cell_height = 20, screen_cols = 80, screen_rows = 24 }
+  end,
 }
 package.loaded["sixel-graphics.processors.magick_cli"] = {
-  get_dimensions = function() return { width = 640, height = 480 } end,
-  encode_to_sixel = function() return "dummy" end,
-  is_available = function() return true end,
+  get_dimensions = function()
+    return { width = 640, height = 480 }
+  end,
+  encode_to_sixel = function()
+    return "dummy"
+  end,
+  is_available = function()
+    return true
+  end,
 }
 package.loaded["sixel-graphics.config"] = {
   setup = function() end,
@@ -85,7 +98,9 @@ describe("init", function()
     it("enable() re-renders tracked images", function()
       -- Spy on backend.render
       local backend = require("sixel-graphics.backends.sixel")
-      local spy = require("luassert.spy").new(function() return "re-rendered-id" end)
+      local spy = require("luassert.spy").new(function()
+        return "re-rendered-id"
+      end)
       backend.render = spy
 
       -- Add a rendered image to state

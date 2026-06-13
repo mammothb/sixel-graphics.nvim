@@ -6,11 +6,15 @@
   "workspace": {
     "library": [
       "/opt/nvim/share/nvim/runtime/lua",
-      "${3rd}/luv/library"
+      "${3rd}/luv/library",
+      "${3rd}/busted/library",
+      "${3rd}/luassert/library",
+      "tests/luassert-extras.lua"
     ],
     "checkThirdParty": false
   },
   "diagnostics": {
-    "globals": ["vim", "describe", "it", "before_each", "after_each", "setup", "teardown", "pending", "spy", "mock", "stub", "insulate"]
+    "globals": [
+    ]
   }
 }

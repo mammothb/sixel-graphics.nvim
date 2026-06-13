@@ -101,7 +101,7 @@ end
 ---Uses identify -format %wx%h (v6) or magick identify -format %wx%h (v7).
 ---For GIF files, reads dimensions of the first frame only (appends [0]).
 ---@param path string  Absolute or relative path to image file
----@return { width: number, height: number }|nil  Dimensions, or nil on failure
+---@return { width: number, height: number }?
 function M.get_dimensions(path)
   if not has_magick and not has_identify then
     vim.notify("sixel-graphics: ImageMagick 'identify' command not found", vim.log.levels.WARN)

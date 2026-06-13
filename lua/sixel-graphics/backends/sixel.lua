@@ -143,24 +143,53 @@ end
 function M.send_test_sixel(x, y)
   -- 10x10 sixels = 10px wide × 60px tall (~3.5 char cells at 16px/cell)
   local row = "~~~~~~~~~~" -- 10 solid sixels = 10 pixels wide
-  local test_image =
-    '"1;1;10;10'         -- sixel params: 10x10 aspect dots
-    .. "#0;2;100;0;0"    -- color 0: red   (RGB 100,0,0)
-    .. "#1;2;0;100;0"    -- color 1: green (RGB 0,100,0)
-    .. "#2;2;0;0;100"    -- color 2: blue  (RGB 0,0,100)
-    .. "#3;2;100;100;0"  -- color 3: yellow (RGB 100,100,0)
+  local test_image = '"1;1;10;10' -- sixel params: 10x10 aspect dots
+    .. "#0;2;100;0;0" -- color 0: red   (RGB 100,0,0)
+    .. "#1;2;0;100;0" -- color 1: green (RGB 0,100,0)
+    .. "#2;2;0;0;100" -- color 2: blue  (RGB 0,0,100)
+    .. "#3;2;100;100;0" -- color 3: yellow (RGB 100,100,0)
     -- Top half: red + green
-    .. "#0" .. row .. "#1" .. row
-    .. "$#0" .. row .. "#1" .. row
-    .. "$#0" .. row .. "#1" .. row
-    .. "$#0" .. row .. "#1" .. row
-    .. "$#0" .. row .. "#1" .. row
+    .. "#0"
+    .. row
+    .. "#1"
+    .. row
+    .. "$#0"
+    .. row
+    .. "#1"
+    .. row
+    .. "$#0"
+    .. row
+    .. "#1"
+    .. row
+    .. "$#0"
+    .. row
+    .. "#1"
+    .. row
+    .. "$#0"
+    .. row
+    .. "#1"
+    .. row
     -- Bottom half: blue + yellow
-    .. "$#2" .. row .. "#3" .. row
-    .. "$#2" .. row .. "#3" .. row
-    .. "$#2" .. row .. "#3" .. row
-    .. "$#2" .. row .. "#3" .. row
-    .. "$#2" .. row .. "#3" .. row
+    .. "$#2"
+    .. row
+    .. "#3"
+    .. row
+    .. "$#2"
+    .. row
+    .. "#3"
+    .. row
+    .. "$#2"
+    .. row
+    .. "#3"
+    .. row
+    .. "$#2"
+    .. row
+    .. "#3"
+    .. row
+    .. "$#2"
+    .. row
+    .. "#3"
+    .. row
 
   M.send_sixel(test_image, x, y)
 end
@@ -186,10 +215,7 @@ function M.setup(state)
 
   -- Validate ImageMagick
   if vim.fn.executable("magick") == 0 and vim.fn.executable("convert") == 0 then
-    vim.notify(
-      "sixel-graphics: ImageMagick not found. Install ImageMagick with sixel support.",
-      vim.log.levels.ERROR
-    )
+    vim.notify("sixel-graphics: ImageMagick not found. Install ImageMagick with sixel support.", vim.log.levels.ERROR)
     return
   end
 
@@ -197,7 +223,7 @@ function M.setup(state)
   if M.is_tmux() and not M.tmux_has_passthrough() then
     vim.notify(
       "sixel-graphics: running inside tmux but allow-passthrough is off. "
-      .. "Enable it with: tmux set allow-passthrough on",
+        .. "Enable it with: tmux set allow-passthrough on",
       vim.log.levels.ERROR
     )
   end
@@ -223,10 +249,7 @@ function M.render(image_path, x, y, width_cells, height_cells)
 
   local term_size = require("sixel-graphics.utils.term").get_size()
   if not term_size or not term_size.cell_width then
-    vim.notify(
-      "sixel-graphics: cannot determine terminal cell size",
-      vim.log.levels.ERROR
-    )
+    vim.notify("sixel-graphics: cannot determine terminal cell size", vim.log.levels.ERROR)
     return nil
   end
 
@@ -304,7 +327,9 @@ end
 ---(scroll, mode change, Ctrl-L).
 ---@param image_id? string  Specific image to clear, or nil to clear all
 function M.clear(image_id)
-  if not M.state then return end
+  if not M.state then
+    return
+  end
 
   if image_id then
     local img = M.state.images[image_id]

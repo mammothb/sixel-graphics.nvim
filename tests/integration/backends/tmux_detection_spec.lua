@@ -1,5 +1,6 @@
 ---Integration tests for tmux detection and passthrough helpers.
 ---Stubs vim.fn.system to verify CLI output parsing logic.
+---@diagnostic disable: duplicate-set-field
 
 local backend = require("sixel-graphics.backends.sixel")
 

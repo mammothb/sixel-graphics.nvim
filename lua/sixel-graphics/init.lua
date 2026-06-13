@@ -1,6 +1,6 @@
 ---@class SixelGraphics
 ---@field has_setup boolean
----@field state table
+---@field state table|nil
 local M = { has_setup = false, state = nil }
 
 ---@private
@@ -77,7 +77,7 @@ end
 
 ---Get the pixel dimensions of an image file.
 ---@param path string
----@return { width: number, height: number }|nil
+---@return { width: number, height: number }?
 function M.get_image_dimensions(path)
   return require("sixel-graphics.processors.magick_cli").get_dimensions(path)
 end
@@ -100,6 +100,10 @@ function M.render_image_at_cursor(path, width_cells)
   local proc = require("sixel-graphics.processors.magick_cli")
   local backend = require("sixel-graphics.backends.sixel")
   local term = require("sixel-graphics.utils.term").get_size()
+  if not term then
+    vim.notify("sixel-graphics: cannot determine terminal cell size", vim.log.levels.ERROR)
+    return false
+  end
 
   -- Get image natural dimensions
   local dims = proc.get_dimensions(path)
@@ -151,9 +155,7 @@ function M.enable()
   -- Re-render all tracked images
   for _, img in pairs(M.state.images) do
     if img.is_rendered then
-      require("sixel-graphics.backends.sixel").render(
-        img.path, img.x, img.y, img.width, img.height
-      )
+      require("sixel-graphics.backends.sixel").render(img.path, img.x, img.y, img.width, img.height)
     end
   end
   vim.notify("sixel-graphics: enabled", vim.log.levels.INFO)

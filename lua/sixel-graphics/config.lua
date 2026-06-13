@@ -5,18 +5,20 @@ local M = {}
 
 ---@class Config
 ---@field enabled boolean
----@field max_width integer|nil Maximum display width in cells (nil for no limit)
----@field max_height integer|nil Maximum display height in cells (nil for no limit)
----@field scale number Scale factor (default 1.0)
----@field y_offset integer Default row offset for rendering
+---@field max_width? integer|nil Maximum display width in cells (nil for no limit)
+---@field max_height? integer|nil Maximum display height in cells (nil for no limit)
+---@field scale? number Scale factor (default 1.0)
+---@field y_offset? integer Default row offset for rendering
+---@field cell_width_override? integer|nil
+---@field cell_height_override? integer|nil
 M.defaults = {
   enabled = true,
   max_width = nil,
   max_height = nil,
   scale = 1.0,
   y_offset = 0,
-  cell_width_override = nil,   -- force cell width in pixels (overrides TIOCGWINSZ)
-  cell_height_override = nil,  -- force cell height in pixels (overrides TIOCGWINSZ)
+  cell_width_override = nil, -- force cell width in pixels (overrides TIOCGWINSZ)
+  cell_height_override = nil, -- force cell height in pixels (overrides TIOCGWINSZ)
 }
 
 ---@param opts Config?
