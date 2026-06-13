@@ -1,14 +1,13 @@
 ---Integration tests for magick_cli output parsing: get_format and get_dimensions.
 ---Stubs vim.fn.system to verify parsing of ImageMagick CLI output
 ---without requiring actual ImageMagick installation.
----@diagnostic disable: need-check-nil, duplicate-set-field
 
 -- Helper: creates a stub that returns queued responses for successive calls.
 -- Note: vim.v.shell_error is read-only so we can't simulate shell errors here.
 -- Error paths are tested via empty-path / non-existent-file guards instead.
 local function queued_system(responses)
   local call = 0
-  return function(cmd)
+  return function(_cmd)
     call = call + 1
     local r = responses[call]
     if not r then

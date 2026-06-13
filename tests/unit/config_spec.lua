@@ -1,4 +1,3 @@
----@diagnostic disable: missing-fields
 local config = require("sixel-graphics.config")
 
 describe("config", function()

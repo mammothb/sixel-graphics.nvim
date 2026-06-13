@@ -1,6 +1,5 @@
 ---Tests for init.lua state machine: guard_setup error,
 ---enable/disable/is_enabled transitions, clear_images delegation.
----@diagnostic disable: assign-type-mismatch
 
 -- Pre-load mocks to prevent side effects during init.lua loading
 package.loaded["sixel-graphics.backends.sixel"] = {

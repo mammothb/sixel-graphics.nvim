@@ -34,7 +34,7 @@ function M.setup(opts)
   -- Initialize backend
   require("sixel-graphics.backends.sixel").setup(M.state)
 
-  local group = vim.api.nvim_create_augroup("SixelGraphics", { clear = true })
+  local _group = vim.api.nvim_create_augroup("SixelGraphics", { clear = true })
 
   -- TODO: autocommands in Steps 5-6
 

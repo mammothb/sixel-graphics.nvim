@@ -1,7 +1,7 @@
 ---Tests for backend.render() pixel math: cell→pixel conversion,
 ---scale, max size constraints (aspect-ratio-preserving), and y_offset.
 ---Mocks term.get_size() and magick_cli.encode_to_sixel(); spies on send_sixel().
----@diagnostic disable: need-check-nil, assign-type-mismatch, duplicate-set-field
+---@diagnostic disable: duplicate-set-field
 
 -- Pre-load mocks for modules that render() requires at call time
 local mock_term_size = { cell_width = 10, cell_height = 20, screen_cols = 80, screen_rows = 24 }

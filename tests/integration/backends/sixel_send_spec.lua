@@ -1,7 +1,7 @@
 ---Integration tests for send_sixel() escape sequence generation.
 ---Spies on vim.fn.chansend to verify exact escape sequences produced
 ---without actually writing to the terminal.
----@diagnostic disable: param-type-mismatch, duplicate-set-field
+---@diagnostic disable: duplicate-set-field
 
 local backend = require("sixel-graphics.backends.sixel")
 local ESC = "\27"
