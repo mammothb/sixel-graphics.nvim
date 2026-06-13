@@ -198,4 +198,93 @@ function M.disable()
   vim.notify("sixel-graphics: disabled", vim.log.levels.INFO)
 end
 
+----------------------------------------------------------------------
+-- Phase 6.1: Floating window terminal positioning
+----------------------------------------------------------------------
+
+---@private
+---Compute the absolute terminal (col, row) for a floating window's content area.
+---The content area is the region inside the border where we want sixels to appear.
+---Accounts for border thickness and tabline visibility.
+---@param win number  Window handle
+---@return number col  0-indexed terminal column of content area top-left
+---@return number row  0-indexed terminal row of content area top-left
+local function floating_win_term_origin(win)
+  -- nvim_win_get_position returns {row, col} as a single array
+  local pos = vim.api.nvim_win_get_position(win)
+  local screen_row = pos[1]
+  local screen_col = pos[2]
+
+  -- Account for border: position includes border.
+  -- Content area is offset inward by border thickness.
+  local config = vim.api.nvim_win_get_config(win)
+  if config.border and config.border ~= "none" then
+    screen_row = screen_row + 1 -- top border
+    screen_col = screen_col + 1 -- left border
+  end
+
+  -- Account for tabline if visible above the editing area
+  local showtab = vim.o.showtabline
+  if showtab == 2 or (showtab == 1 and #vim.api.nvim_list_tabpages() > 1) then
+    screen_row = screen_row + 1
+  end
+
+  return screen_col, screen_row
+end
+
+---Create a floating window at cursor and render a hardcoded sixel test pattern
+---inside it. Phase 6.1 verification: proves sixel can render at the correct
+---terminal position within a floating window.
+---
+---Usage:
+---```vim
+---:lua require("sixel-graphics").show_test_popup()
+---```
+---
+---@return number|nil win  Floating window handle
+---@return number|nil buf  Buffer handle
+function M.show_test_popup()
+  guard_setup()
+
+  if not M.state.enabled then
+    vim.notify("sixel-graphics: rendering is disabled", vim.log.levels.WARN)
+    return nil, nil
+  end
+
+  -- 1. Create floating window below cursor
+  local buf = vim.api.nvim_create_buf(false, true)
+  local width = 20
+  local height = 10
+
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = "cursor",
+    row = 1, -- appear below cursor
+    col = 0, -- same column as cursor
+    width = width,
+    height = height,
+    style = "minimal",
+    border = "single",
+  })
+
+  -- 2. Compute terminal coordinates for the content area
+  local term_col, term_row = floating_win_term_origin(win)
+
+  -- 3. Send hardcoded test sixel at computed position
+  require("sixel-graphics.backends.sixel").send_test_sixel(term_col, term_row)
+
+  local debug_pos = vim.api.nvim_win_get_position(win)
+  vim.notify(
+    string.format(
+      "sixel-graphics: test popup at term (%d,%d), screen (%d,%d)",
+      term_col,
+      term_row,
+      debug_pos[2], -- screen col
+      debug_pos[1] -- screen row
+    ),
+    vim.log.levels.INFO
+  )
+
+  return win, buf
+end
+
 return M
