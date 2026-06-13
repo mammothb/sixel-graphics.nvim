@@ -234,6 +234,39 @@ function M.render(image_path, x, y, width_cells, height_cells)
   local pixel_w = math.floor(width_cells * term_size.cell_width + 0.5)
   local pixel_h = math.floor(height_cells * term_size.cell_height + 0.5)
 
+  -- Apply config: scale, max size (aspect-ratio-preserving), y_offset
+  local opts = M.state.options or {}
+
+  -- Scale (user preference, e.g. 0.5 = half size)
+  local scale = opts.scale or 1.0
+  if scale ~= 1.0 then
+    pixel_w = math.floor(pixel_w * scale + 0.5)
+    pixel_h = math.floor(pixel_h * scale + 0.5)
+  end
+
+  -- Max width constraint (cells → pixels, preserves aspect ratio)
+  if opts.max_width then
+    local max_w_px = math.floor(opts.max_width * term_size.cell_width + 0.5)
+    if pixel_w > max_w_px then
+      local ratio = max_w_px / pixel_w
+      pixel_w = max_w_px
+      pixel_h = math.floor(pixel_h * ratio + 0.5)
+    end
+  end
+
+  -- Max height constraint (cells → pixels, preserves aspect ratio)
+  if opts.max_height then
+    local max_h_px = math.floor(opts.max_height * term_size.cell_height + 0.5)
+    if pixel_h > max_h_px then
+      local ratio = max_h_px / pixel_h
+      pixel_h = max_h_px
+      pixel_w = math.floor(pixel_w * ratio + 0.5)
+    end
+  end
+
+  -- Vertical offset (rows below the logical position)
+  y = y + (opts.y_offset or 0)
+
   -- Encode via ImageMagick
   local proc = require("sixel-graphics.processors.magick_cli")
   local sixel_data = proc.encode_to_sixel(image_path, pixel_w, pixel_h)

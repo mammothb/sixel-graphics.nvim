@@ -20,6 +20,7 @@ function M.setup(opts)
   M.state = {
     images = {},
     term_size = require("sixel-graphics.utils.term").get_size(),
+    options = require("sixel-graphics.config").options,
   }
 
   -- Initialize backend
