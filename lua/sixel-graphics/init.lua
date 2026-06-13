@@ -41,4 +41,41 @@ function M.send_test_sixel_at_cursor()
   require("sixel-graphics.backends.sixel").send_test_sixel_at_cursor()
 end
 
+---Check if ImageMagick is available for image processing.
+---@return boolean
+function M.magick_is_available()
+  return require("sixel-graphics.processors.magick_cli").is_available()
+end
+
+---Get the format of an image file.
+---@param path string
+---@return string|nil
+function M.get_image_format(path)
+  return require("sixel-graphics.processors.magick_cli").get_format(path)
+end
+
+---Get the pixel dimensions of an image file.
+---@param path string
+---@return { width: number, height: number }|nil
+function M.get_image_dimensions(path)
+  return require("sixel-graphics.processors.magick_cli").get_dimensions(path)
+end
+
+---Encode an image file to sixel and render at cursor.
+---Convenience function for manual testing.
+---@param path string
+---@param width? number
+---@param height? number
+function M.render_image_at_cursor(path, width, height)
+  local proc = require("sixel-graphics.processors.magick_cli")
+  local backend = require("sixel-graphics.backends.sixel")
+  local data = proc.encode_to_sixel(path, width, height)
+  if not data then
+    return false
+  end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  backend.send_sixel(data, cursor[2], cursor[1] - 1)
+  return true
+end
+
 return M
