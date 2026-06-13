@@ -437,4 +437,60 @@ function M.show_image_popup(image_path)
   return win, image_id
 end
 
+----------------------------------------------------------------------
+-- Phase 6.3: Cursor tracking + hover detection
+----------------------------------------------------------------------
+
+---Check if the cursor is currently on a line with a markdown image.
+---Prints the image URL to :messages. For manual verification.
+function M.check_cursor_on_image()
+  guard_setup()
+
+  local buf = vim.api.nvim_get_current_buf()
+  local ft = vim.bo[buf].filetype
+  if ft ~= "markdown" then
+    vim.notify("sixel-graphics: not a markdown buffer", vim.log.levels.INFO)
+    return
+  end
+
+  local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf)
+  if match then
+    vim.notify("sixel-graphics: image found: " .. match.url, vim.log.levels.INFO)
+  else
+    vim.notify("sixel-graphics: no image on this line", vim.log.levels.INFO)
+  end
+end
+
+---Enable debug CursorMoved logging for hover detection verification.
+---Logs to :messages whenever the cursor lands on a markdown image line.
+---Call stop_hover_debug() to disable.
+function M.start_hover_debug()
+  guard_setup()
+
+  local group = vim.api.nvim_create_augroup("SixelGraphicsHoverDebug", { clear = true })
+
+  vim.api.nvim_create_autocmd({ "CursorMoved" }, {
+    group = group,
+    callback = function(args)
+      local ft = vim.bo[args.buf].filetype
+      if ft ~= "markdown" then
+        return
+      end
+
+      local match = require("sixel-graphics.integrations.markdown").find_image_at_row(args.buf)
+      if match then
+        vim.notify("[hover] " .. match.url, vim.log.levels.INFO)
+      end
+    end,
+  })
+
+  vim.notify("sixel-graphics: hover debug enabled (CursorMoved logging)", vim.log.levels.INFO)
+end
+
+---Disable the debug CursorMoved logging.
+function M.stop_hover_debug()
+  pcall(vim.api.nvim_del_augroup_by_name, "SixelGraphicsHoverDebug")
+  vim.notify("sixel-graphics: hover debug disabled", vim.log.levels.INFO)
+end
+
 return M

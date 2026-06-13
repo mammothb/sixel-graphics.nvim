@@ -98,4 +98,27 @@ function M.query_buffer_images(buf)
   return images
 end
 
+---Find a markdown image whose range contains the given cursor row.
+---Returns the first matching image, or nil if cursor is not on an image line.
+---@param buf? number      Buffer handle (default: current buffer)
+---@param cursor_row? number  0-indexed row to check (default: current cursor row)
+---@return MarkdownImageMatch|nil
+function M.find_image_at_row(buf, cursor_row)
+  buf = buf or vim.api.nvim_get_current_buf()
+  local images = M.query_buffer_images(buf)
+
+  if cursor_row == nil then
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    cursor_row = cursor[1] - 1 -- 1-indexed → 0-indexed
+  end
+
+  for _, img in ipairs(images) do
+    if img.range.start_row <= cursor_row and cursor_row <= img.range.end_row then
+      return img
+    end
+  end
+
+  return nil
+end
+
 return M
