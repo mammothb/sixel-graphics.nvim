@@ -321,4 +321,8 @@ function M.clear(image_id)
   end
 end
 
+-- Exported for unit testing
+M._ensure_dcs = ensure_dcs
+M._tmux_wrap = tmux_wrap
+
 return M

@@ -140,7 +140,7 @@ end
 ---Check whether image rendering is currently enabled.
 ---@return boolean
 function M.is_enabled()
-  return M.has_setup and M.state and M.state.enabled == true
+  return not not (M.has_setup and M.state and M.state.enabled == true)
 end
 
 ---Enable image rendering (show images).
