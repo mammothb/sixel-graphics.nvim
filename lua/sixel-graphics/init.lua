@@ -1,6 +1,7 @@
 ---@class SixelGraphics
 ---@field has_setup boolean
-local M = { has_setup = false }
+---@field state table
+local M = { has_setup = false, state = nil }
 
 ---Setup sixel-graphics.nvim with optional configuration.
 ---
@@ -15,9 +16,18 @@ local M = { has_setup = false }
 function M.setup(opts)
   require("sixel-graphics.config").setup(opts)
 
+  -- Initialize shared state
+  M.state = {
+    images = {},
+    term_size = require("sixel-graphics.utils.term").get_size(),
+  }
+
+  -- Initialize backend
+  require("sixel-graphics.backends.sixel").setup(M.state)
+
   local group = vim.api.nvim_create_augroup("SixelGraphics", { clear = true })
 
-  -- TODO: add autocommands, keymaps, etc.
+  -- TODO: autocommands in Steps 5-6
 
   M.has_setup = true
 end
@@ -61,21 +71,48 @@ function M.get_image_dimensions(path)
   return require("sixel-graphics.processors.magick_cli").get_dimensions(path)
 end
 
----Encode an image file to sixel and render at cursor.
----Convenience function for manual testing.
+---Render an image at the current cursor position with a given width in cells.
+---Height is derived from the image's aspect ratio.
 ---@param path string
----@param width? number
----@param height? number
-function M.render_image_at_cursor(path, width, height)
-  local proc = require("sixel-graphics.processors.magick_cli")
-  local backend = require("sixel-graphics.backends.sixel")
-  local data = proc.encode_to_sixel(path, width, height)
-  if not data then
+---@param width_cells? number  Width in character cells (default 40)
+---@return boolean  True if rendered successfully
+function M.render_image_at_cursor(path, width_cells)
+  width_cells = width_cells or 40
+
+  if not M.has_setup then
+    vim.notify("sixel-graphics: not set up. Call require('sixel-graphics').setup() first.", vim.log.levels.ERROR)
     return false
   end
+
+  local proc = require("sixel-graphics.processors.magick_cli")
+  local backend = require("sixel-graphics.backends.sixel")
+  local term = require("sixel-graphics.utils.term").get_size()
+
+  -- Get image natural dimensions
+  local dims = proc.get_dimensions(path)
+  if not dims then
+    return false
+  end
+
+  -- Calculate height to preserve aspect ratio
+  local aspect = dims.height / dims.width
+  local pixel_h = math.floor(width_cells * term.cell_width * aspect + 0.5)
+  local height_cells = pixel_h / term.cell_height
+
   local cursor = vim.api.nvim_win_get_cursor(0)
-  backend.send_sixel(data, cursor[2], cursor[1] - 1)
-  return true
+  local id = backend.render(path, cursor[2], cursor[1] - 1, width_cells, height_cells)
+  if id then
+    vim.notify("Rendered: " .. id, vim.log.levels.INFO)
+    return true
+  end
+  return false
+end
+
+---Clear all rendered images from tracking state.
+---Sixel images persist on screen until terminal redraw (Ctrl-L, scroll, etc.).
+function M.clear_images()
+  require("sixel-graphics.backends.sixel").clear()
+  vim.notify("Images cleared", vim.log.levels.INFO)
 end
 
 return M
