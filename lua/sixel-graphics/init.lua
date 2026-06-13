@@ -23,9 +23,10 @@ function M.setup(opts)
 end
 
 ---Check whether the current terminal supports sixel.
+---Delegates to the sixel backend for detection logic.
 ---@return boolean
 function M.is_sixel_supported()
-  return vim.env.TERM_PROGRAM == "foot" or vim.env.TERM_PROGRAM == "WezTerm"
+  return require("sixel-graphics.backends.sixel").is_sixel_supported()
 end
 
 return M
