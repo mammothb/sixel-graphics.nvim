@@ -420,16 +420,24 @@ function M.show_image_popup(image_path)
       return
     end
 
+    require("sixel-graphics.utils.logger").debug(function()
+      return string.format("show_image_popup: encoding %s → %dx%d px", image_path, pixel_w, pixel_h)
+    end)
+
     local sixel_data = proc.encode_to_sixel(image_path, pixel_w, pixel_h)
     if not sixel_data then
-      vim.notify("sixel-graphics: encode_to_sixel failed for " .. image_path, vim.log.levels.ERROR)
       return
     end
+
+    require("sixel-graphics.utils.logger").debug(function()
+      return string.format("show_image_popup: encode done, %d bytes", #sixel_data)
+    end)
 
     vim.defer_fn(function()
       if not vim.api.nvim_win_is_valid(win) then
         return
       end
+      require("sixel-graphics.utils.logger").debug("show_image_popup: sending sixel to stderr")
       backend.send_sixel(sixel_data, term_col, term_row)
     end, opts.popup_render_delay_ms or 16)
   end)
@@ -491,6 +499,219 @@ end
 function M.stop_hover_debug()
   pcall(vim.api.nvim_del_augroup_by_name, "SixelGraphicsHoverDebug")
   vim.notify("sixel-graphics: hover debug disabled", vim.log.levels.INFO)
+end
+
+----------------------------------------------------------------------
+-- Phase 6.4: Popup lifecycle
+----------------------------------------------------------------------
+
+-- Active popup state (single-popup: only one hover popup at a time)
+local active_popup = nil -- { win: number, buf: number, image_id: string, path: string }
+local popup_timer = nil -- vim.fn.timer_start handle for debounce
+local popup_in_progress = false -- guard against re-entrant create/destroy
+local prev_cursor_row = -1
+
+local POPUP_DEBOUNCE_MS = 150
+
+---@private
+---Close the active hover popup (if any) and clear its sixel image.
+local function close_active_popup()
+  if not active_popup then
+    return
+  end
+
+  require("sixel-graphics.utils.logger").debug("close_active_popup")
+
+  popup_in_progress = true
+
+  -- Clear the image from backend tracking
+  if active_popup.image_id then
+    require("sixel-graphics.backends.sixel").clear(active_popup.image_id)
+  end
+
+  -- Close the floating window (triggers Neovim redraw → clears sixel from screen)
+  if active_popup.win and vim.api.nvim_win_is_valid(active_popup.win) then
+    vim.api.nvim_win_close(active_popup.win, true)
+  end
+
+  active_popup = nil
+
+  -- Reset guard after a short delay so BufEnter/WinClosed events during
+  -- cleanup don't trigger spurious re-renders.
+  vim.defer_fn(function()
+    popup_in_progress = false
+  end, 50)
+end
+
+---@private
+---Create and show a hover popup for the resolved image path.
+---@param image_path string  Absolute path to the image file
+---@return boolean  True if popup was created
+local function create_popup_for_image(image_path)
+  local logger = require("sixel-graphics.utils.logger")
+  logger.debug(function()
+    return "create_popup_for_image: " .. image_path
+  end)
+
+  if popup_in_progress then
+    logger.debug("create_popup_for_image: blocked")
+    return false
+  end
+
+  -- Close any existing popup first (enforce single-popup)
+  close_active_popup()
+
+  -- Show the image in a floating window
+  local win, image_id = M.show_image_popup(image_path)
+  if not win then
+    logger.debug("create_popup_for_image: show_image_popup returned nil")
+    return false
+  end
+
+  active_popup = {
+    win = win,
+    buf = vim.api.nvim_win_get_buf(win),
+    image_id = image_id,
+    path = image_path,
+  }
+
+  logger.debug("create_popup_for_image: done")
+  return true
+end
+
+---@private
+---CursorMoved handler: detect if cursor is on an image line,
+---and create/close popup accordingly. Debounced to prevent flicker
+---on rapid cursor movement.
+---@param buf number  Buffer handle
+local function on_cursor_moved(buf)
+  -- Skip if a popup operation is already in progress (prevent re-entrancy
+  -- from autocmds firing during window create/destroy).
+  if popup_in_progress then
+    return
+  end
+
+  local ft = vim.bo[buf].filetype
+  if ft ~= "markdown" then
+    -- Cursor left a markdown buffer: close any active popup
+    close_active_popup()
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cursor_row = cursor[1] - 1
+
+  -- Same line as before with an active popup: nothing to do
+  if cursor_row == prev_cursor_row and active_popup then
+    return
+  end
+  prev_cursor_row = cursor_row
+
+  -- Cancel any pending debounced popup
+  if popup_timer then
+    vim.fn.timer_stop(popup_timer)
+    popup_timer = nil
+  end
+
+  -- Check if cursor is on an image line
+  local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
+
+  if not match then
+    -- Cursor moved off image: close popup immediately (feels responsive)
+    close_active_popup()
+    return
+  end
+
+  -- Resolve image path
+  local buf_path = vim.api.nvim_buf_get_name(buf)
+  if buf_path == "" then
+    return -- untitled buffer, can't resolve relative paths
+  end
+
+  local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
+
+  -- Check file exists
+  if vim.fn.filereadable(abs_path) == 0 then
+    return
+  end
+
+  -- If the same image is already showing, don't recreate
+  if active_popup and active_popup.path == abs_path then
+    return
+  end
+
+  -- Debounce: wait for cursor to settle before showing popup.
+  -- Rapid cursor movement keeps cancelling the timer → no flicker.
+  require("sixel-graphics.utils.logger").debug(function()
+    return "on_cursor_moved: debounce " .. POPUP_DEBOUNCE_MS .. "ms for " .. abs_path
+  end)
+
+  popup_timer = vim.fn.timer_start(POPUP_DEBOUNCE_MS, function()
+    popup_timer = nil
+    require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired")
+    vim.schedule(function()
+      create_popup_for_image(abs_path)
+    end)
+  end)
+end
+
+---Close the active hover popup (if any).
+---Public API — can be called manually or mapped to a key.
+function M.close_popup()
+  close_active_popup()
+end
+
+---Enable hover mode: register CursorMoved autocmd that shows images on hover.
+---Call stop_hover() to disable. In Phase 6.5 this will be integrated into setup().
+function M.start_hover()
+  guard_setup()
+
+  -- Clear any previous hover autocmds
+  pcall(vim.api.nvim_del_augroup_by_name, "SixelGraphicsHover")
+  local group = vim.api.nvim_create_augroup("SixelGraphicsHover", { clear = true })
+
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    group = group,
+    callback = function(args)
+      if not M.state.enabled then
+        return
+      end
+      on_cursor_moved(args.buf)
+    end,
+  })
+
+  -- Close popup when leaving a markdown buffer
+  vim.api.nvim_create_autocmd({ "BufLeave" }, {
+    group = group,
+    callback = function(args)
+      local ft = vim.bo[args.buf].filetype
+      if ft == "markdown" then
+        close_active_popup()
+      end
+    end,
+  })
+
+  -- Clean up if floating window is closed externally (e.g. :q)
+  vim.api.nvim_create_autocmd({ "WinClosed" }, {
+    group = group,
+    callback = function(args)
+      if active_popup and active_popup.win == tonumber(args.file) then
+        if active_popup.image_id then
+          require("sixel-graphics.backends.sixel").clear(active_popup.image_id)
+        end
+        active_popup = nil
+      end
+    end,
+  })
+
+  vim.notify("sixel-graphics: hover enabled", vim.log.levels.INFO)
+end
+
+---Disable hover mode.
+function M.stop_hover()
+  close_active_popup()
+  pcall(vim.api.nvim_del_augroup_by_name, "SixelGraphicsHover")
+  vim.notify("sixel-graphics: hover disabled", vim.log.levels.INFO)
 end
 
 return M

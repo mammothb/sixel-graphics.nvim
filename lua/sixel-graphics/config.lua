@@ -23,6 +23,11 @@ M.defaults = {
   -- set to 0.625 for Windows Terminal HiDPI, 1.0 for most others
   popup_render_delay_ms = 16, -- delay after window creation before sending sixel
   -- one frame at 60Hz; increase if image renders behind window
+  debug = {
+    enabled = false,
+    level = "info", -- "debug"|"info"|"warn"|"error"
+    file_path = nil, -- e.g. "/tmp/sixel-debug.log"
+  },
 }
 
 ---@param opts Config?
