@@ -82,6 +82,35 @@ function M.get_image_dimensions(path)
   return require("sixel-graphics.processors.magick_cli").get_dimensions(path)
 end
 
+---Parse the current markdown buffer and return all image references.
+---Each match includes the source range and the raw URL/path.
+---
+---Usage:
+---```lua
+---:lua vim.print(require("sixel-graphics").query_markdown_images())
+---```
+---
+---@param buf? number  Buffer handle (default: current buffer)
+---@return MarkdownImageMatch[]
+function M.query_markdown_images(buf)
+  return require("sixel-graphics.integrations.markdown").query_buffer_images(buf)
+end
+
+---Resolve an image path found in a markdown file to an absolute filesystem path.
+---
+---Usage:
+---```lua
+---:lua print(require("sixel-graphics").resolve_image_path(
+---  vim.api.nvim_buf_get_name(0), "./images/cat.png"))
+---```
+---
+---@param buffer_file_path string  Absolute path to the markdown file
+---@param image_path string         Image URL as written in the markdown
+---@return string  Absolute path to the resolved image
+function M.resolve_image_path(buffer_file_path, image_path)
+  return require("sixel-graphics.utils.path").resolve_image_path(buffer_file_path, image_path)
+end
+
 ---Render an image at the current cursor position with a given width in cells.
 ---Height is derived from the image's aspect ratio.
 ---@param path string
