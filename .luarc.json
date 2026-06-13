@@ -11,6 +11,6 @@
     "checkThirdParty": false
   },
   "diagnostics": {
-    "globals": ["vim"]
+    "globals": ["vim", "describe", "it", "before_each", "after_each", "setup", "teardown", "pending", "spy", "mock", "stub", "insulate"]
   }
 }
