@@ -19,6 +19,10 @@ M.defaults = {
   y_offset = 0,
   cell_width_override = nil, -- force cell width in pixels (overrides TIOCGWINSZ)
   cell_height_override = nil, -- force cell height in pixels (overrides TIOCGWINSZ)
+  sixel_pixel_scale = 1.0, -- compensate for terminal sixel density vs text cell density
+  -- set to 0.625 for Windows Terminal HiDPI, 1.0 for most others
+  popup_render_delay_ms = 16, -- delay after window creation before sending sixel
+  -- one frame at 60Hz; increase if image renders behind window
 }
 
 ---@param opts Config?

@@ -287,4 +287,154 @@ function M.show_test_popup()
   return win, buf
 end
 
+----------------------------------------------------------------------
+-- Phase 6.2: Render real image inside floating window
+----------------------------------------------------------------------
+
+---Maximum fraction of the screen a popup may occupy (height and width).
+local MAX_POPUP_SCREEN_FRACTION = 0.5
+
+---Show an image in a floating popup window at the cursor position.
+---The window is sized to fit the image while preserving aspect ratio,
+---constrained to at most ~50% of screen dimensions and config limits.
+---
+---Uses the lower-level encode→sixel pipeline directly (not backend.render())
+---because the popup pre-computes its own dimensions with scale/constraints —
+---backend.render() would double-apply config transforms.
+---
+---Usage:
+---```vim
+---:lua require("sixel-graphics").show_image_popup("test-plasma.png")
+---```
+---
+---@param image_path string  Absolute path to the image file
+---@return number|nil win    Floating window handle, nil on failure
+---@return string|nil image_id  Image id for tracking/cleanup
+function M.show_image_popup(image_path)
+  guard_setup()
+
+  if not M.state.enabled then
+    vim.notify("sixel-graphics: rendering is disabled", vim.log.levels.WARN)
+    return nil, nil
+  end
+
+  local proc = require("sixel-graphics.processors.magick_cli")
+  local backend = require("sixel-graphics.backends.sixel")
+  local term = require("sixel-graphics.utils.term").get_size()
+  if not term then
+    return nil, nil
+  end
+
+  -- 1. Get image natural dimensions
+  local dims = proc.get_dimensions(image_path)
+  if not dims then
+    vim.notify("sixel-graphics: cannot read image dimensions from " .. image_path, vim.log.levels.ERROR)
+    return nil, nil
+  end
+
+  -- 2. Compute popup size in cells (apply scale, constrain to screen and config)
+  local opts = M.state.options or {}
+  local scale = opts.scale or 1.0
+
+  local natural_w = math.max(1, math.floor(dims.width / term.cell_width * scale + 0.5))
+  local natural_h = math.max(1, math.floor(dims.height / term.cell_height * scale + 0.5))
+
+  -- Max dimensions: smaller of screen-fraction cap and user-configured max
+  local max_w = math.floor(term.screen_cols * MAX_POPUP_SCREEN_FRACTION)
+  local max_h = math.floor(term.screen_rows * MAX_POPUP_SCREEN_FRACTION)
+  if opts.max_width then
+    max_w = math.min(max_w, opts.max_width)
+  end
+  if opts.max_height then
+    max_h = math.min(max_h, opts.max_height)
+  end
+
+  -- Fit within bounds, preserving aspect ratio
+  local pw, ph = natural_w, natural_h
+  if pw > max_w then
+    ph = math.floor(ph * max_w / pw + 0.5)
+    pw = max_w
+  end
+  if ph > max_h then
+    pw = math.floor(pw * max_h / ph + 0.5)
+    ph = max_h
+  end
+
+  -- Minimum size so the window + border is visible
+  pw = math.max(pw, 5)
+  ph = math.max(ph, 3)
+
+  -- 3. Create floating window at cursor
+  local buf = vim.api.nvim_create_buf(false, true)
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = "cursor",
+    row = 1,
+    col = 0,
+    width = pw,
+    height = ph,
+    style = "minimal",
+    border = "single",
+  })
+
+  -- 4. Compute terminal coordinates for content area
+  local term_col, term_row = floating_win_term_origin(win)
+
+  -- 5. Convert cell dimensions → pixels, apply sixel density compensation
+  local sps = opts.sixel_pixel_scale or 1.0
+  local pixel_w = math.floor(pw * term.cell_width * sps + 0.5)
+  local pixel_h = math.floor(ph * term.cell_height * sps + 0.5)
+
+  -- 6. Track in state for cleanup (do this before the async send)
+  local image_id = image_path .. "@popup-" .. tostring(win)
+  M.state.images[image_id] = {
+    id = image_id,
+    path = image_path,
+    x = term_col,
+    y = term_row,
+    width = pw,
+    height = ph,
+    is_rendered = true,
+  }
+
+  vim.notify(
+    string.format(
+      "sixel-graphics: popup %dx%d cells (%dx%d px), original %dx%d px",
+      pw,
+      ph,
+      pixel_w,
+      pixel_h,
+      dims.width,
+      dims.height
+    ),
+    vim.log.levels.INFO
+  )
+
+  -- 7. Encode + send after floating window is painted.
+  --    vim.schedule: runs in next event-loop iteration after Neovim
+  --    processes the window creation and flushes its redraw to stdout.
+  --    vim.defer_fn(16): waits one frame (~16ms at 60Hz) for the
+  --    terminal to actually render the window before we send sixel
+  --    to stderr (which would otherwise race ahead and render first).
+  vim.schedule(function()
+    if not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+
+    local sixel_data = proc.encode_to_sixel(image_path, pixel_w, pixel_h)
+    if not sixel_data then
+      vim.notify("sixel-graphics: encode_to_sixel failed for " .. image_path, vim.log.levels.ERROR)
+      return
+    end
+
+    vim.defer_fn(function()
+      if not vim.api.nvim_win_is_valid(win) then
+        return
+      end
+      backend.send_sixel(sixel_data, term_col, term_row)
+    end, opts.popup_render_delay_ms or 16)
+  end)
+
+  return win, image_id
+end
+
 return M

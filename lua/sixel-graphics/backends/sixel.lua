@@ -253,12 +253,13 @@ function M.render(image_path, x, y, width_cells, height_cells)
     return nil
   end
 
-  -- Convert cell dimensions → pixel dimensions
-  local pixel_w = math.floor(width_cells * term_size.cell_width + 0.5)
-  local pixel_h = math.floor(height_cells * term_size.cell_height + 0.5)
+  -- Convert cell dimensions → pixel dimensions (apply sixel density compensation)
+  local opts = M.state.options or {}
+  local sps = opts.sixel_pixel_scale or 1.0
+  local pixel_w = math.floor(width_cells * term_size.cell_width * sps + 0.5)
+  local pixel_h = math.floor(height_cells * term_size.cell_height * sps + 0.5)
 
   -- Apply config: scale, max size (aspect-ratio-preserving), y_offset
-  local opts = M.state.options or {}
 
   -- Scale (user preference, e.g. 0.5 = half size)
   local scale = opts.scale or 1.0
