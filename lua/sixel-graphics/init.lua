@@ -562,9 +562,9 @@ function M.create_popup_for_diagram(source, renderer_opts)
 end
 
 ---@private
----CursorMoved handler: detect if cursor is on an image line,
----and create/close popup accordingly. Debounced to prevent flicker
----on rapid cursor movement.
+---CursorMoved handler: detect if cursor is on an image reference or
+---inside a mermaid diagram block, and create/close popup accordingly.
+---Debounced to prevent flicker on rapid cursor movement.
 ---@param buf number  Buffer handle
 on_cursor_moved = function(buf)
   -- Skip if a popup operation is already in progress (prevent re-entrancy
@@ -596,48 +596,81 @@ on_cursor_moved = function(buf)
     popup_timer = nil
   end
 
-  -- Check if cursor is on an image line
+  -- ── IMAGE CHECK ────────────────────────────────────────────────
+
   local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
 
-  if not match then
-    -- Cursor moved off image: close popup immediately (feels responsive)
-    close_active_popup()
-    return
-  end
+  if match then
+    -- Resolve image path
+    local buf_path = vim.api.nvim_buf_get_name(buf)
+    if buf_path == "" then
+      return -- untitled buffer, can't resolve relative paths
+    end
 
-  -- Resolve image path
-  local buf_path = vim.api.nvim_buf_get_name(buf)
-  if buf_path == "" then
-    return -- untitled buffer, can't resolve relative paths
-  end
+    local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
 
-  local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
+    -- Check file exists
+    if vim.fn.filereadable(abs_path) == 0 then
+      return
+    end
 
-  -- Check file exists
-  if vim.fn.filereadable(abs_path) == 0 then
-    return
-  end
+    -- If the same image is already showing, don't recreate
+    if active_popup and active_popup.path == abs_path then
+      return
+    end
 
-  -- If the same image is already showing, don't recreate
-  if active_popup and active_popup.path == abs_path then
-    return
-  end
+    -- Debounce: wait for cursor to settle before showing popup.
+    -- Rapid cursor movement keeps cancelling the timer → no flicker.
+    local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
 
-  -- Debounce: wait for cursor to settle before showing popup.
-  -- Rapid cursor movement keeps cancelling the timer → no flicker.
-  local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
-
-  require("sixel-graphics.utils.logger").debug(function()
-    return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
-  end)
-
-  popup_timer = vim.fn.timer_start(debounce_ms, function()
-    popup_timer = nil
-    require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired")
-    vim.schedule(function()
-      create_popup_for_image(abs_path)
+    require("sixel-graphics.utils.logger").debug(function()
+      return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
     end)
-  end)
+
+    popup_timer = vim.fn.timer_start(debounce_ms, function()
+      popup_timer = nil
+      require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (image)")
+      vim.schedule(function()
+        create_popup_for_image(abs_path)
+      end)
+    end)
+    return
+  end
+
+  -- ── DIAGRAM CHECK ─────────────────────────────────────────────
+
+  local diag_opts = ((M.state.options or {}).hover or {}).diagrams
+  if diag_opts and diag_opts.enabled ~= false then
+    local diagram = require("sixel-graphics.integrations.markdown").find_diagram_at_row(buf, cursor_row)
+
+    if diagram then
+      -- If the same diagram is already showing, don't recreate
+      if active_popup and active_popup.source == diagram.source then
+        return
+      end
+
+      local renderer_opts = ((M.state.options or {}).renderer_options or {}).mermaid or {}
+      local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
+
+      require("sixel-graphics.utils.logger").debug(function()
+        return "on_cursor_moved: diagram debounce " .. debounce_ms .. "ms"
+      end)
+
+      popup_timer = vim.fn.timer_start(debounce_ms, function()
+        popup_timer = nil
+        require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (diagram)")
+        vim.schedule(function()
+          M.create_popup_for_diagram(diagram.source, renderer_opts)
+        end)
+      end)
+      return
+    end
+  end
+
+  -- ── NEITHER ───────────────────────────────────────────────────
+
+  -- Cursor on neither image nor diagram: close popup immediately
+  close_active_popup()
 end
 
 ---Close the active hover popup (if any).

@@ -82,6 +82,25 @@ describe("config", function()
       assert.are.same({ "markdown" }, hover.filetypes)
     end)
 
+    it("has hover.diagrams.enabled = true by default", function()
+      config.setup()
+      local diagrams = config.options.hover.diagrams
+      assert.is_not_nil(diagrams)
+      assert.is_true(diagrams.enabled)
+    end)
+
+    it("accepts hover.diagrams.enabled override", function()
+      config.setup({
+        hover = {
+          diagrams = { enabled = false },
+        },
+      })
+      assert.is_false(config.options.hover.diagrams.enabled)
+      -- Other hover keys unaffected
+      assert.is_true(config.options.hover.enabled)
+      assert.are.equal(150, config.options.hover.debounce_ms)
+    end)
+
     it("deep-extends hover overrides while keeping non-overridden keys", function()
       config.setup({
         hover = {

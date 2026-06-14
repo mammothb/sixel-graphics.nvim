@@ -30,6 +30,7 @@ M.defaults = {
   },
   hover = {
     enabled = true, -- automatically show images on hover in markdown
+    diagrams = { enabled = true }, -- also show mermaid diagrams on hover
     debounce_ms = 150, -- delay before showing popup after cursor settles
     max_screen_fraction = 0.5, -- max fraction of screen the popup may occupy
     filetypes = { "markdown" }, -- filetypes to enable hover in
