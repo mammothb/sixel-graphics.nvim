@@ -3,9 +3,7 @@
 ---Renders Mermaid diagram source code to PNG via an external CLI tool.
 ---Two renderer backends are supported:
 ---  - mmdr (mermaid-rs-renderer): native Rust, 2-6ms, synchronous `vim.fn.system()`
----  - mmdc (mermaid-cli): Node.js/Chromium, 1-5s, async `vim.fn.jobstart()` (Step D3)
----
----Currently only the mmdr path is implemented. The mmdc path will be added in Step D3.
+---  - mmdc (mermaid-cli): Node.js/Chromium, 1-5s, async `vim.fn.jobstart()`
 ---@class MermaidRenderer
 local M = {
   id = "mermaid",
@@ -220,10 +218,10 @@ function M.render(source, options, on_complete)
 
   -- ── mmdc path ──────────────────────────────────────────────────
   if renderer_name == "mmdc" then
-    -- 1. Hash source with "mmdc:" prefix (separate cache from mmdr)
+    -- "mmdc:" prefix keeps cache separate from mmdr — same source
+    -- produces different PNGs under different renderers.
     local hash = _compute_hash(source, "mmdc")
 
-    -- 2. Check cache — sync return, no callback
     local cached = _check_cache(hash)
     if cached then
       logger.debug(function()
@@ -232,13 +230,12 @@ function M.render(source, options, on_complete)
       return { file_path = cached }
     end
 
-    -- 3. on_complete is required for async path
+    -- mmdc is async; caller must provide a completion callback
     if not on_complete then
       vim.notify("sixel-graphics: mmdc render requires a callback for async completion", vim.log.levels.ERROR)
       return nil
     end
 
-    -- 4. Check mmdc executable
     if vim.fn.executable("mmdc") == 0 then
       vim.notify(
         "sixel-graphics: mmdc not found in PATH. Install via: npm install -g @mermaid-js/mermaid-cli",
@@ -247,12 +244,10 @@ function M.render(source, options, on_complete)
       return nil
     end
 
-    -- 5. Write source to temp file
     local temp_path = vim.fn.tempname() .. ".mmd"
     local lines = vim.split(source, "\n")
     vim.fn.writefile(lines, temp_path)
 
-    -- 6. Build command
     local cache_path = _get_cache_path(hash)
     local mmdc_opts = vim.deepcopy(options.mmdc or {})
     local cmd_args = _build_mmdc_command(temp_path, cache_path, mmdc_opts)
@@ -261,13 +256,11 @@ function M.render(source, options, on_complete)
       return "mermaid.render: mmdc spawning: " .. table.concat(cmd_args, " ")
     end)
 
-    -- 7. Collect stderr for error reporting
+    -- Capture stderr so we can include it in error notifications
     local stderr_lines = {}
 
-    -- 8. Set up timeout guard (30s)
     local timeout_guard = nil
 
-    -- 9. Spawn async job with on_exit completion handler
     local job_id = M._jobstart(cmd_args, {
       on_stderr = function(_, data, _)
         if data then
@@ -277,7 +270,6 @@ function M.render(source, options, on_complete)
         end
       end,
       on_exit = function(_, exit_code, _)
-        -- Cancel timeout guard if job completed before timeout
         if timeout_guard then
           vim.fn.timer_stop(timeout_guard)
           timeout_guard = nil
@@ -285,7 +277,6 @@ function M.render(source, options, on_complete)
 
         -- on_exit fires in libuv context — schedule to safely call Neovim APIs
         vim.schedule(function()
-          -- Clean up temp file
           vim.fn.delete(temp_path)
 
           if exit_code == 0 and vim.fn.filereadable(cache_path) == 1 then
@@ -310,7 +301,9 @@ function M.render(source, options, on_complete)
       return nil
     end
 
-    -- 10. Start timeout guard (fires if on_exit never does)
+    -- Safety net: if mmdc hangs (Puppeteer crash, zombie Chromium),
+    -- kill the job after 30s and notify the user. 30s is well above
+    -- normal render time (~5s) but below "did Neovim freeze?" territory.
     timeout_guard = vim.fn.timer_start(30000, function()
       pcall(vim.fn.jobstop, job_id)
       vim.schedule(function()
@@ -319,20 +312,20 @@ function M.render(source, options, on_complete)
       end)
     end)
 
-    -- Return job_id for tracking (result comes via on_complete callback)
+    -- Return immediately; caller polls via active_diagram_job_id.
+    -- Result delivered via on_complete when mmdc exits.
     return { job_id = job_id }
   end
 
-  -- ── mmdr path (unchanged from D2) ──────────────────────────────
+  -- ── mmdr path ──────────────────────────────────────────────────
   if renderer_name ~= "mmdr" then
     vim.notify("sixel-graphics: unknown renderer '" .. tostring(renderer_name) .. "'", vim.log.levels.ERROR)
     return nil
   end
 
-  -- 1. Hash source (includes renderer name for separate caches)
+  -- Hash includes renderer name so mmdr and mmdc caches stay separate
   local hash = _compute_hash(source, "mmdr")
 
-  -- 2. Check cache
   local cached = _check_cache(hash)
   if cached then
     logger.debug(function()
@@ -341,7 +334,6 @@ function M.render(source, options, on_complete)
     return { file_path = cached }
   end
 
-  -- 3. Check mmdr executable
   if vim.fn.executable("mmdr") == 0 then
     vim.notify(
       "sixel-graphics: mmdr not found in PATH. Install via: cargo install mermaid-rs-renderer",
@@ -350,16 +342,15 @@ function M.render(source, options, on_complete)
     return nil
   end
 
-  -- 4. Write source to temp file
   local temp_path = vim.fn.tempname() .. ".mmd"
   local lines = vim.split(source, "\n")
   vim.fn.writefile(lines, temp_path)
 
-  -- 5. Build command and run synchronously
   local cache_path = _get_cache_path(hash)
   local mmdr_opts = vim.deepcopy(options.mmdr or {})
 
-  -- Default config_file to bundled font config if user didn't set one
+  -- Default to the bundled font config so text renders on Linux
+  -- systems where mmdr's built-in fonts are absent
   if not mmdr_opts.config_file then
     mmdr_opts.config_file = _bundled_config_path()
   end
@@ -372,10 +363,8 @@ function M.render(source, options, on_complete)
 
   local output, exit_code = M._run_system(cmd_args)
 
-  -- 6. Clean up temp file
   vim.fn.delete(temp_path)
 
-  -- 7. Check result
   if exit_code ~= 0 then
     local stderr = tostring(output):gsub("^%s+", ""):gsub("%s+$", "")
     vim.notify(

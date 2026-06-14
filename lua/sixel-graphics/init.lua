@@ -327,14 +327,14 @@ function M.show_image_popup(image_path)
     return nil, nil
   end
 
-  -- 1. Get image natural dimensions
+  -- Get image natural dimensions
   local dims = proc.get_dimensions(image_path)
   if not dims then
     vim.notify("sixel-graphics: cannot read image dimensions from " .. image_path, vim.log.levels.ERROR)
     return nil, nil
   end
 
-  -- 2. Compute popup size in cells (apply scale, constrain to screen and config)
+  -- Compute popup size in cells (apply scale, constrain to screen and config)
   local opts = M.state.options or {}
   local scale = opts.scale or 1.0
 
@@ -367,7 +367,7 @@ function M.show_image_popup(image_path)
   pw = math.max(pw, 5)
   ph = math.max(ph, 3)
 
-  -- 3. Create floating window at cursor
+  -- Create floating window at cursor
   local buf = vim.api.nvim_create_buf(false, true)
   local win = vim.api.nvim_open_win(buf, false, {
     relative = "cursor",
@@ -379,15 +379,15 @@ function M.show_image_popup(image_path)
     border = "single",
   })
 
-  -- 4. Compute terminal coordinates for content area
+  -- Compute terminal coordinates for content area
   local term_col, term_row = floating_win_term_origin(win)
 
-  -- 5. Convert cell dimensions → pixels, apply sixel density compensation
+  -- Convert cell dimensions → pixels, apply sixel density compensation
   local sps = opts.sixel_pixel_scale or 1.0
   local pixel_w = math.floor(pw * term.cell_width * sps + 0.5)
   local pixel_h = math.floor(ph * term.cell_height * sps + 0.5)
 
-  -- 6. Track in state for cleanup (do this before the async send)
+  -- Track in state for cleanup
   local image_id = image_path .. "@popup-" .. tostring(win)
   M.state.images[image_id] = {
     id = image_id,
@@ -411,12 +411,12 @@ function M.show_image_popup(image_path)
     )
   end)
 
-  -- 7. Encode + send after floating window is painted.
-  --    vim.schedule: runs in next event-loop iteration after Neovim
-  --    processes the window creation and flushes its redraw to stdout.
-  --    vim.defer_fn(16): waits one frame (~16ms at 60Hz) for the
-  --    terminal to actually render the window before we send sixel
-  --    to stderr (which would otherwise race ahead and render first).
+  -- Encode + send after floating window is painted.
+  -- vim.schedule: runs in next event-loop iteration after Neovim
+  -- processes the window creation and flushes its redraw to stdout.
+  -- vim.defer_fn(16): waits one frame (~16ms at 60Hz) for the
+  -- terminal to actually render the window before we send sixel
+  -- to stderr (which would otherwise race ahead and render first).
   vim.schedule(function()
     if not vim.api.nvim_win_is_valid(win) then
       return

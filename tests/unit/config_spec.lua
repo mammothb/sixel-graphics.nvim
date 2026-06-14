@@ -69,7 +69,7 @@ describe("config", function()
     end)
   end)
 
-  -- ── hover defaults (Step 6) ──────────────────────────────────────
+  -- ── hover defaults ──────────────────────────────────────────────
 
   describe("hover defaults", function()
     it("has all hover keys with correct defaults", function()
@@ -128,7 +128,7 @@ describe("config", function()
     end)
   end)
 
-  -- ── hover.images defaults (Step D5.1) ───────────────────────────
+  -- ── hover.images defaults ───────────────────────────────────────
 
   describe("hover.images defaults", function()
     it("has hover.images.enabled = true by default", function()
@@ -161,7 +161,7 @@ describe("config", function()
     end)
   end)
 
-  -- ── debug defaults (Step 6) ──────────────────────────────────────
+  -- ── debug defaults ──────────────────────────────────────────────
 
   describe("debug defaults", function()
     it("has all debug keys with correct defaults", function()
@@ -187,9 +187,9 @@ describe("config", function()
     end)
   end)
 
-  -- ── sixel + popup config (Step 6) ─────────────────────────────────
+  -- ── sixel + popup config ─────────────────────────────────────────
 
-  -- ── renderer_options.mermaid defaults (Step D2.1) ────────────────
+  -- ── renderer_options.mermaid defaults ────────────────────────────
 
   describe("renderer_options.mermaid defaults", function()
     it("has renderer_options with mermaid key", function()
