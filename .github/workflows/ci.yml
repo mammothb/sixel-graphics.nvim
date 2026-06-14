@@ -9,15 +9,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - &checkout
-        name: Checkout
+        name: "Checkout"
         uses: actions/checkout@v6
-      - name: Setup - StyLua
+      - name: "Setup - StyLua"
         uses: JohnnyMorganz/stylua-action@76fd70c03e6340ceaf673366712db9b20560b402 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: 2.5.2
           args: false
-      - name: Setup - selene
+      - name: "Setup - selene"
         env:
           SELENE_VERSION: "0.31.0"
         run: |
@@ -25,25 +25,30 @@ jobs:
           unzip -o selene.zip
           chmod +x selene
           sudo mv selene /usr/local/bin/selene
-      - name: Check - Formatting
+      - name: "Check - Formatting"
         run: make format
-      - name: Check - Lint
+      - name: "Check - Lint"
         run: make lint
   test:
     runs-on: ubuntu-latest
     steps:
       - *checkout
-      - name: Setup - Neovim
+      - name: "Setup - Neovim"
         env:
           NEOVIM_VERSION: "0.11.7"
         run: |
           curl -fsSL "https://github.com/neovim/neovim/releases/download/v${NEOVIM_VERSION}/nvim-linux-x86_64.tar.gz" -o nvim.tar.gz
-          sudo tar -C /usr/local --strip-components=1 -xzvf nvim-linux-x86_64.tar.gz
-      - name: Setup - ImageMagick, LuaRocks
-        run: sudo apt-get install -y imagemagick luarocks
-      - name: Setup - vusted
+          sudo tar -C /usr/local --strip-components=1 -xzvf nvim.tar.gz
+      - name: "Setup - ImageMagick, Lua 5.1, LuaRocks"
         run: |
-          luarocks install --local vusted
+          sudo apt-get install -y \
+            imagemagick \
+            liblua5.1-dev \
+            lua5.1 \
+            luarocks
+      - name: "Setup - vusted"
+        run: |
+          luarocks --local --lua-version=5.1 install vusted
           echo "${HOME}/.luarocks/bin" >> "${GITHUB_PATH}"
-      - name: Run tests
+      - name: "Run tests"
         run: make test
