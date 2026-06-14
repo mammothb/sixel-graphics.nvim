@@ -1,4 +1,4 @@
-PLAN*.md
+scratch/
 
 # Compiled Lua sources
 luac.out
