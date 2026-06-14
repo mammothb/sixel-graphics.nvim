@@ -29,10 +29,31 @@ M.defaults = {
     file_path = nil, -- e.g. "/tmp/sixel-debug.log"
   },
   hover = {
-    enabled = true, -- automatically show images on hover in markdown
+    images = { enabled = true }, -- show images on hover in markdown
+    diagrams = { enabled = true }, -- show mermaid diagrams on hover
     debounce_ms = 150, -- delay before showing popup after cursor settles
     max_screen_fraction = 0.5, -- max fraction of screen the popup may occupy
     filetypes = { "markdown" }, -- filetypes to enable hover in
+  },
+  renderer_options = {
+    mermaid = {
+      renderer = "mmdr", -- "mmdr" (native Rust, 2-6ms) | "mmdc" (Node.js/Chromium, 1-5s)
+      min_popup_width = 40, -- minimum popup width in cells (diagrams auto-size to content, enforce floor)
+      mmdr = {
+        width = nil, -- nil | number (px, mmdr -w flag, default 1200)
+        height = nil, -- nil | number (px, mmdr -H flag, default 800)
+        fast_text = false, -- use calibrated fallback widths (mmdr --fastText)
+        config_file = nil, -- nil | path to mmdr config.json (-c flag; bundled default has font settings)
+      },
+      mmdc = {
+        theme = nil, -- nil | "default" | "dark" | "forest" | "neutral"
+        background = nil, -- nil | "transparent" | "white" | "#hex"
+        scale = nil, -- nil | number (1-3)
+        width = nil, -- nil | number (px)
+        height = nil, -- nil | number (px)
+        cli_args = nil, -- nil | string[] (extra mmdc CLI args, e.g. {"--no-sandbox"})
+      },
+    },
   },
 }
 

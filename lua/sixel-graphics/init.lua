@@ -63,7 +63,7 @@ function M.setup(opts)
 
   -- Hover autocommands: show images on cursor hover in markdown buffers
   local hover_opts = M.state.options.hover
-  if hover_opts and hover_opts.enabled ~= false then
+  if hover_opts then
     local group = vim.api.nvim_create_augroup("SixelGraphicsHover", { clear = true })
 
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
@@ -98,6 +98,15 @@ function M.setup(opts)
           end
           active_popup = nil
         end
+      end,
+    })
+
+    -- Close popup when entering insert/visual mode (popup covers text being edited)
+    vim.api.nvim_create_autocmd({ "ModeChanged" }, {
+      group = group,
+      pattern = "*:i,*:v,*:V,*:\22",
+      callback = function()
+        close_active_popup()
       end,
     })
   end
@@ -144,6 +153,21 @@ end
 ---@return MarkdownImageMatch[]
 function M.query_markdown_images(buf)
   return require("sixel-graphics.integrations.markdown").query_buffer_images(buf)
+end
+
+---Parse the current markdown buffer and return all mermaid diagram
+---fenced code blocks. Each match includes the renderer_id, source
+---code, and source range.
+---
+---Usage:
+---```lua
+---:lua vim.print(require("sixel-graphics").query_markdown_diagrams())
+---```
+---
+---@param buf? number  Buffer handle (default: current buffer)
+---@return DiagramMatch[]
+function M.query_markdown_diagrams(buf)
+  return require("sixel-graphics.integrations.markdown").query_buffer_diagrams(buf)
 end
 
 ---Resolve an image path found in a markdown file to an absolute filesystem path.
@@ -288,7 +312,7 @@ end
 ---@param image_path string  Absolute path to the image file
 ---@return number|nil win    Floating window handle, nil on failure
 ---@return string|nil image_id  Image id for tracking/cleanup
-function M.show_image_popup(image_path)
+function M.show_image_popup(image_path, popup_opts)
   guard_setup()
 
   if not M.state.enabled then
@@ -303,14 +327,14 @@ function M.show_image_popup(image_path)
     return nil, nil
   end
 
-  -- 1. Get image natural dimensions
+  -- Get image natural dimensions
   local dims = proc.get_dimensions(image_path)
   if not dims then
     vim.notify("sixel-graphics: cannot read image dimensions from " .. image_path, vim.log.levels.ERROR)
     return nil, nil
   end
 
-  -- 2. Compute popup size in cells (apply scale, constrain to screen and config)
+  -- Compute popup size in cells (apply scale, constrain to screen and config)
   local opts = M.state.options or {}
   local scale = opts.scale or 1.0
 
@@ -339,11 +363,21 @@ function M.show_image_popup(image_path)
     ph = max_h
   end
 
+  -- Enforce minimum popup width (diagrams auto-size to content, can be tiny).
+  -- Clamped to max_w so the minimum cannot exceed screen/configured bounds.
+  if popup_opts and popup_opts.min_width_cells then
+    local min_w = math.min(popup_opts.min_width_cells, max_w)
+    if pw < min_w then
+      ph = math.floor(ph * min_w / pw + 0.5)
+      pw = min_w
+    end
+  end
+
   -- Minimum size so the window + border is visible
   pw = math.max(pw, 5)
   ph = math.max(ph, 3)
 
-  -- 3. Create floating window at cursor
+  -- Create floating window at cursor
   local buf = vim.api.nvim_create_buf(false, true)
   local win = vim.api.nvim_open_win(buf, false, {
     relative = "cursor",
@@ -355,15 +389,15 @@ function M.show_image_popup(image_path)
     border = "single",
   })
 
-  -- 4. Compute terminal coordinates for content area
+  -- Compute terminal coordinates for content area
   local term_col, term_row = floating_win_term_origin(win)
 
-  -- 5. Convert cell dimensions → pixels, apply sixel density compensation
+  -- Convert cell dimensions → pixels, apply sixel density compensation
   local sps = opts.sixel_pixel_scale or 1.0
   local pixel_w = math.floor(pw * term.cell_width * sps + 0.5)
   local pixel_h = math.floor(ph * term.cell_height * sps + 0.5)
 
-  -- 6. Track in state for cleanup (do this before the async send)
+  -- Track in state for cleanup
   local image_id = image_path .. "@popup-" .. tostring(win)
   M.state.images[image_id] = {
     id = image_id,
@@ -387,12 +421,12 @@ function M.show_image_popup(image_path)
     )
   end)
 
-  -- 7. Encode + send after floating window is painted.
-  --    vim.schedule: runs in next event-loop iteration after Neovim
-  --    processes the window creation and flushes its redraw to stdout.
-  --    vim.defer_fn(16): waits one frame (~16ms at 60Hz) for the
-  --    terminal to actually render the window before we send sixel
-  --    to stderr (which would otherwise race ahead and render first).
+  -- Encode + send after floating window is painted.
+  -- vim.schedule: runs in next event-loop iteration after Neovim
+  -- processes the window creation and flushes its redraw to stdout.
+  -- vim.defer_fn(16): waits one frame (~16ms at 60Hz) for the
+  -- terminal to actually render the window before we send sixel
+  -- to stderr (which would otherwise race ahead and render first).
   vim.schedule(function()
     if not vim.api.nvim_win_is_valid(win) then
       return
@@ -424,14 +458,32 @@ function M.show_image_popup(image_path)
 end
 
 -- Active popup state (single-popup: only one hover popup at a time)
-active_popup = nil -- { win: number, buf: number, image_id: string, path: string }
+active_popup = nil -- { win: number, buf: number, image_id: string, path: string, source?: string }
+
+-- mmdc job currently rendering (nil if idle). Tracked separately from
+-- active_popup because during async rendering there is no popup yet —
+-- the popup only appears when mmdc completes. This field lets us
+-- detect "cursor moved away during loading" and silently discard
+-- the stale result (it's cached on disk; next hover is instant).
+local active_diagram_job_id = nil
+
 local popup_timer = nil -- vim.fn.timer_start handle for debounce
 local popup_in_progress = false -- guard against re-entrant create/destroy
+
+-- Tracks the cursor row from the previous on_cursor_moved invocation.
+-- When the cursor lands on the same row as an already-active popup,
+-- we skip the entire dispatch (image/diagram check + debounce) to
+-- avoid unnecessary work on every CursorMoved event within the same line.
 local prev_cursor_row = -1
 
 ---@private
 ---Close the active hover popup (if any) and clear its sixel image.
 close_active_popup = function()
+  -- Cancel any pending mmdc job (result will be cached, silently ignored).
+  -- Must happen before the active_popup nil guard so stale jobs are
+  -- cleaned up even when cursor moves during mmdc loading (no popup yet).
+  active_diagram_job_id = nil
+
   if not active_popup then
     return
   end
@@ -452,8 +504,11 @@ close_active_popup = function()
 
   active_popup = nil
 
-  -- Reset guard after a short delay so BufEnter/WinClosed events during
-  -- cleanup don't trigger spurious re-renders.
+  -- Close triggers Neovim autocmds (BufEnter on the newly-focused
+  -- window, WinClosed for the popup). If on_cursor_moved fires from
+  -- those autocmds before popup_in_progress is cleared, it could
+  -- re-create the popup immediately. Defer the reset past the current
+  -- event-loop tick so those cascading autocmds see the guard.
   vim.defer_fn(function()
     popup_in_progress = false
   end, 50)
@@ -495,10 +550,205 @@ local function create_popup_for_image(image_path)
   return true
 end
 
+---Render a mermaid diagram and show it in a floating popup.
+---Uses the configured renderer (mmdr or mmdc) to produce a PNG,
+---then delegates to show_image_popup() for display.
+---
+---mmdr path: synchronous vim.fn.system() (~2-6ms). Returns
+---  immediately with the popup visible.
+---
+---mmdc path: asynchronous vim.fn.jobstart() (~1-5s). Returns
+---  immediately after spawning the job; the popup appears later
+---  via an on_complete callback when mmdc finishes.
+---
+---@param source string        Diagram source code
+---@param renderer_opts table  renderer_options.mermaid from config
+---@return boolean  True if popup was created (or async job started)
+function M.create_popup_for_diagram(source, renderer_opts)
+  guard_setup()
+
+  local logger = require("sixel-graphics.utils.logger")
+  logger.debug(function()
+    return "create_popup_for_diagram: " .. source:gsub("\n", "\\n"):sub(1, 80)
+  end)
+
+  if popup_in_progress then
+    logger.debug("create_popup_for_diagram: blocked")
+    return false
+  end
+
+  -- Close any existing popup first (enforce single-popup)
+  -- Do this before rendering so stale popup doesn't linger during mmdc delay
+  close_active_popup()
+
+  local renderer_name = renderer_opts and renderer_opts.renderer or "mmdr"
+  local mermaid = require("sixel-graphics.renderers.mermaid")
+  local popup_opts = renderer_opts
+      and renderer_opts.min_popup_width
+      and { min_width_cells = renderer_opts.min_popup_width }
+    or nil
+
+  -- ── mmdc path ────────────────────────────────────────────────
+
+  if renderer_name == "mmdc" then
+    active_diagram_job_id = nil -- clear any stale job
+
+    -- mmdc has two return shapes:
+    --   cache hit:  { file_path }          ← sync, no callback consumed
+    --   cache miss: { job_id }              ← async, callback was consumed
+    local result = mermaid.render(source, renderer_opts, function(path, err)
+      vim.schedule(function()
+        if active_diagram_job_id == nil then
+          -- Popup was closed while loading (cursor moved away).
+          -- Job result is cached on disk; next hover will be instant.
+          logger.debug("create_popup_for_diagram: mmdc complete but stale (popup closed)")
+          return
+        end
+        active_diagram_job_id = nil
+
+        if err then
+          vim.notify("sixel-graphics: diagram render failed: " .. err, vim.log.levels.ERROR)
+          return
+        end
+
+        -- Close any popup that appeared in the meantime
+        close_active_popup()
+
+        local win, image_id = M.show_image_popup(path, popup_opts)
+        if win then
+          active_popup = {
+            win = win,
+            buf = vim.api.nvim_win_get_buf(win),
+            image_id = image_id,
+            path = path,
+            source = source,
+          }
+          logger.debug("create_popup_for_diagram: mmdc async complete")
+        end
+      end)
+    end)
+
+    if not result then
+      -- Renderer not installed or spawn failed (already notified by mermaid module)
+      logger.debug("create_popup_for_diagram: mmdc render failed to start")
+      return false
+    end
+
+    -- Cache hit: synchronous return with file_path
+    if result.file_path then
+      logger.debug("create_popup_for_diagram: mmdc cache hit")
+
+      local win, image_id = M.show_image_popup(result.file_path, popup_opts)
+      if not win then
+        logger.debug("create_popup_for_diagram: show_image_popup returned nil")
+        return false
+      end
+
+      active_popup = {
+        win = win,
+        buf = vim.api.nvim_win_get_buf(win),
+        image_id = image_id,
+        path = result.file_path,
+        source = source,
+      }
+
+      logger.debug("create_popup_for_diagram: mmdc cache hit done")
+      return true
+    end
+
+    -- Cache miss: async job started
+    if result.job_id then
+      vim.notify("sixel-graphics: rendering diagram...", vim.log.levels.INFO)
+      active_diagram_job_id = result.job_id
+      logger.debug("create_popup_for_diagram: mmdc async started (job_id=" .. result.job_id .. ")")
+      return true
+    end
+
+    -- Malformed result (shouldn't happen)
+    logger.debug("create_popup_for_diagram: mmdc result has neither file_path nor job_id")
+    return false
+  end
+
+  -- ── mmdr sync path ────────────────────────────────────────────
+
+  local result = mermaid.render(source, renderer_opts)
+
+  if not result then
+    -- mermaid.render already notified the user (renderer not installed / error)
+    logger.debug("create_popup_for_diagram: mermaid.render returned nil")
+    return false
+  end
+
+  if not result.file_path then
+    logger.debug("create_popup_for_diagram: result has no file_path")
+    return false
+  end
+
+  -- Show the rendered PNG in a floating window
+  local win, image_id = M.show_image_popup(result.file_path, popup_opts)
+  if not win then
+    logger.debug("create_popup_for_diagram: show_image_popup returned nil")
+    return false
+  end
+
+  active_popup = {
+    win = win,
+    buf = vim.api.nvim_win_get_buf(win),
+    image_id = image_id,
+    path = result.file_path,
+    source = source,
+  }
+
+  logger.debug("create_popup_for_diagram: done")
+  return true
+end
+
+---Render a mermaid diagram to PNG using the configured renderer.
+---Convenience wrapper around the renderer module. Useful for
+---keymaps and manual rendering.
+---
+---mmdr path: synchronous (~2-6ms), returns { file_path } immediately.
+---mmdc path: requires on_complete callback for async result.
+---
+---Usage:
+---```lua
+---:lua local r = require("sixel-graphics").render_mermaid("flowchart LR; A-->B")
+---:lua vim.print(r.file_path)
+---```
+---
+---@param source string     Diagram source code
+---@param opts? table        renderer_options.mermaid (default: from config)
+---@param on_complete? fun(path: string|nil, err: string|nil)  mmdc async callback
+---@return { file_path: string }?  Sync success (mmdr or mmdc cache hit)
+---@return { job_id: number }?     Async started (mmdc cache miss)
+---@return nil                     Error
+function M.render_mermaid(source, opts, on_complete)
+  opts = opts or require("sixel-graphics.config").options.renderer_options.mermaid
+  return require("sixel-graphics.renderers.mermaid").render(source, opts, on_complete)
+end
+
 ---@private
----CursorMoved handler: detect if cursor is on an image line,
----and create/close popup accordingly. Debounced to prevent flicker
----on rapid cursor movement.
+---Start a debounced popup timer. Cancels any pending timer first
+---(caller already did this — defensive). On fire, clears popup_timer
+---and runs callback inside vim.schedule for safe Neovim API access.
+---@param delay_ms number
+---@param label string      Log label ("image" or "diagram")
+---@param callback function  Called inside vim.schedule when timer fires
+local function schedule_popup(delay_ms, label, callback)
+  require("sixel-graphics.utils.logger").debug(function()
+    return "on_cursor_moved: " .. label .. " debounce " .. delay_ms .. "ms"
+  end)
+  popup_timer = vim.fn.timer_start(delay_ms, function()
+    popup_timer = nil
+    require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (" .. label .. ")")
+    vim.schedule(callback)
+  end)
+end
+
+---@private
+---CursorMoved handler: detect if cursor is on an image reference or
+---inside a mermaid diagram block, and create/close popup accordingly.
+---Debounced to prevent flicker on rapid cursor movement.
 ---@param buf number  Buffer handle
 on_cursor_moved = function(buf)
   -- Skip if a popup operation is already in progress (prevent re-entrancy
@@ -508,8 +758,8 @@ on_cursor_moved = function(buf)
   end
 
   local ft = vim.bo[buf].filetype
-  local supported = ((M.state.options or {}).hover or {}).filetypes or { "markdown" }
-  if not vim.tbl_contains(supported, ft) then
+  local hover = M.state.options.hover
+  if not vim.tbl_contains(hover.filetypes, ft) then
     -- Cursor left a supported buffer: close any active popup
     close_active_popup()
     return
@@ -530,48 +780,63 @@ on_cursor_moved = function(buf)
     popup_timer = nil
   end
 
-  -- Check if cursor is on an image line
-  local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
+  -- ── IMAGE CHECK ────────────────────────────────────────────────
 
-  if not match then
-    -- Cursor moved off image: close popup immediately (feels responsive)
-    close_active_popup()
-    return
+  if hover.images.enabled ~= false then
+    local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
+
+    if match then
+      -- Resolve image path
+      local buf_path = vim.api.nvim_buf_get_name(buf)
+      if buf_path == "" then
+        return -- untitled buffer, can't resolve relative paths
+      end
+
+      local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
+
+      -- Check file exists
+      if vim.fn.filereadable(abs_path) == 0 then
+        return
+      end
+
+      -- If the same image is already showing, don't recreate
+      if active_popup and active_popup.path == abs_path then
+        return
+      end
+
+      -- Debounce: wait for cursor to settle before showing popup.
+      -- Rapid cursor movement keeps cancelling the timer → no flicker.
+      schedule_popup(hover.debounce_ms, "image", function()
+        create_popup_for_image(abs_path)
+      end)
+      return
+    end
   end
 
-  -- Resolve image path
-  local buf_path = vim.api.nvim_buf_get_name(buf)
-  if buf_path == "" then
-    return -- untitled buffer, can't resolve relative paths
+  -- ── DIAGRAM CHECK ─────────────────────────────────────────────
+
+  if hover.diagrams.enabled ~= false then
+    local diagram = require("sixel-graphics.integrations.markdown").find_diagram_at_row(buf, cursor_row)
+
+    if diagram then
+      -- If the same diagram is already showing, don't recreate
+      if active_popup and active_popup.source == diagram.source then
+        require("sixel-graphics.utils.logger").debug("on_cursor_moved: same diagram, skipping")
+        return
+      end
+
+      local renderer_opts = M.state.options.renderer_options.mermaid
+      schedule_popup(hover.debounce_ms, "diagram", function()
+        M.create_popup_for_diagram(diagram.source, renderer_opts)
+      end)
+      return
+    end
   end
 
-  local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
+  -- ── NEITHER ───────────────────────────────────────────────────
 
-  -- Check file exists
-  if vim.fn.filereadable(abs_path) == 0 then
-    return
-  end
-
-  -- If the same image is already showing, don't recreate
-  if active_popup and active_popup.path == abs_path then
-    return
-  end
-
-  -- Debounce: wait for cursor to settle before showing popup.
-  -- Rapid cursor movement keeps cancelling the timer → no flicker.
-  local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
-
-  require("sixel-graphics.utils.logger").debug(function()
-    return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
-  end)
-
-  popup_timer = vim.fn.timer_start(debounce_ms, function()
-    popup_timer = nil
-    require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired")
-    vim.schedule(function()
-      create_popup_for_image(abs_path)
-    end)
-  end)
+  -- Cursor on neither image nor diagram: close popup immediately
+  close_active_popup()
 end
 
 ---Close the active hover popup (if any).

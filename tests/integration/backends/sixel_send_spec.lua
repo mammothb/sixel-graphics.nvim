@@ -100,8 +100,11 @@ describe("send_sixel escape sequences", function()
   end)
 
   describe("inside tmux", function()
+    local _system
+
     before_each(function()
       vim.env.TMUX = "/tmp/tmux-1000/default"
+      _system = vim.fn.system
       -- Stub system() for tmux passthrough detection
       vim.fn.system = function(cmd)
         if type(cmd) == "table" then
@@ -120,6 +123,7 @@ describe("send_sixel escape sequences", function()
 
     after_each(function()
       vim.env.TMUX = nil
+      vim.fn.system = _system
     end)
 
     it("wraps entire sequence in tmux passthrough DCS", function()

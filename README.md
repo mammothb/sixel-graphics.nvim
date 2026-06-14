@@ -7,6 +7,14 @@ Display images in Neovim using the sixel graphics protocol.
 - Neovim >= 0.10.0
 - A terminal that supports sixel
 - [ImageMagick](https://imagemagick.org/) with sixel support
+- [mmdr](https://github.com/1jehuang/mermaid-rs-renderer) for mermaid diagram rendering (recommended)
+  ```bash
+  cargo install mermaid-rs-renderer
+  ```
+- Or [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) as an alternative renderer:
+  ```bash
+  npm install -g @mermaid-js/mermaid-cli
+  ```
 
 ## Installation
 
@@ -60,12 +68,36 @@ require("sixel-graphics").setup({
     file_path = nil, -- e.g. "/tmp/sixel-debug.log" (nil = stderr only)
   },
 
-  -- Hover: automatically show images on cursor hover in markdown files
+  -- Hover: automatically show images and diagrams on cursor hover in markdown files
   hover = {
-    enabled = true,
-    debounce_ms = 150,         -- delay before showing popup after cursor settles
-    max_screen_fraction = 0.5, -- max fraction of screen the popup may occupy
-    filetypes = { "markdown" }, -- filetypes to enable hover in
+    images = { enabled = true },   -- toggle image hover
+    diagrams = { enabled = true }, -- toggle diagram hover
+    debounce_ms = 150,             -- delay before showing popup after cursor settles
+    max_screen_fraction = 0.5,     -- max fraction of screen the popup may occupy
+    filetypes = { "markdown" },     -- filetypes to enable hover in
+  },
+
+  -- Mermaid diagram renderer options
+  renderer_options = {
+    mermaid = {
+      renderer = "mmdr",  -- "mmdr" (native Rust, ~2-6ms) | "mmdc" (Node.js/Chromium, ~1-5s)
+
+      mmdr = {
+        width = nil,        -- nil | number (px)
+        height = nil,       -- nil | number (px)
+        fast_text = false,  -- use faster text rendering
+        config_file = nil,  -- nil | path to mmdr config.json (bundled default has font settings)
+      },
+
+      mmdc = {
+        theme = nil,        -- nil | "default" | "dark" | "forest" | "neutral"
+        background = nil,   -- nil | "transparent" | "white" | "#hex"
+        scale = nil,        -- nil | number (1-3)
+        width = nil,        -- nil | number (px)
+        height = nil,       -- nil | number (px)
+        cli_args = nil,     -- nil | string[] (e.g. {"--no-sandbox"})
+      },
+    },
   },
 })
 ```
@@ -81,6 +113,36 @@ Place the cursor on a markdown image line to see the image in a floating popup:
 ```
 
 The popup appears automatically after the cursor settles (`hover.debounce_ms`). Move the cursor away or leave the buffer to dismiss it.
+
+### Mermaid Diagram Hover
+
+Place the cursor inside a mermaid fenced code block in a markdown file to
+see the rendered diagram in a floating popup:
+
+````markdown
+```mermaid
+flowchart LR
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do thing]
+    B -->|No| D[Skip]
+```
+````
+
+The diagram renders via [mmdr](https://github.com/1jehuang/mermaid-rs-renderer)
+(default, ~2-6ms) or [mermaid-cli](https://github.com/mermaid-js/mermaid-cli)
+(opt-in via `renderer = "mmdc"`, ~1-5s). Rendered PNGs are cached at
+`stdpath("cache")/sixel-graphics/mermaid/`.
+
+Toggle image and diagram hover independently:
+
+```lua
+require("sixel-graphics").setup({
+  hover = {
+    images = { enabled = true },
+    diagrams = { enabled = true },
+  },
+})
+```
 
 ### Public API
 
@@ -101,6 +163,9 @@ The popup appears automatically after the cursor settles (`hover.debounce_ms`). 
 | `is_enabled()` | Check if rendering is enabled → `boolean` |
 | `config()` | Get the current config table |
 | `clear_images()` | Clear all rendered images from tracking state |
+| `query_markdown_diagrams(buf?)` | List all mermaid diagram blocks in a markdown buffer → `DiagramMatch[]` |
+| `render_mermaid(source, opts?, on_complete?)` | Render a mermaid diagram to PNG → `{ file_path }` or `{ job_id }` |
+| `create_popup_for_diagram(source, opts)` | Render a mermaid diagram and show it in a popup → `boolean` |
 
 ## Tmux Support
 

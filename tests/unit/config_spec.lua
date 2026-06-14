@@ -69,17 +69,39 @@ describe("config", function()
     end)
   end)
 
-  -- ── hover defaults (Step 6) ──────────────────────────────────────
+  -- ── hover defaults ──────────────────────────────────────────────
 
   describe("hover defaults", function()
     it("has all hover keys with correct defaults", function()
       config.setup()
       local hover = config.options.hover
       assert.is_not_nil(hover)
-      assert.is_true(hover.enabled)
+      assert.is_not_nil(hover.images)
+      assert.is_true(hover.images.enabled)
+      assert.is_not_nil(hover.diagrams)
+      assert.is_true(hover.diagrams.enabled)
       assert.are.equal(150, hover.debounce_ms)
       assert.are.equal(0.5, hover.max_screen_fraction)
       assert.are.same({ "markdown" }, hover.filetypes)
+    end)
+
+    it("has hover.diagrams.enabled = true by default", function()
+      config.setup()
+      local diagrams = config.options.hover.diagrams
+      assert.is_not_nil(diagrams)
+      assert.is_true(diagrams.enabled)
+    end)
+
+    it("accepts hover.diagrams.enabled override", function()
+      config.setup({
+        hover = {
+          diagrams = { enabled = false },
+        },
+      })
+      assert.is_false(config.options.hover.diagrams.enabled)
+      -- Other hover keys unaffected
+      assert.is_true(config.options.hover.images.enabled)
+      assert.are.equal(150, config.options.hover.debounce_ms)
     end)
 
     it("deep-extends hover overrides while keeping non-overridden keys", function()
@@ -89,7 +111,8 @@ describe("config", function()
         },
       })
       local hover = config.options.hover
-      assert.is_true(hover.enabled) -- from default
+      assert.is_true(hover.images.enabled) -- from default
+      assert.is_true(hover.diagrams.enabled) -- from default
       assert.are.equal(300, hover.debounce_ms) -- user override
       assert.are.equal(0.5, hover.max_screen_fraction) -- from default
       assert.are.same({ "markdown" }, hover.filetypes) -- from default
@@ -105,7 +128,40 @@ describe("config", function()
     end)
   end)
 
-  -- ── debug defaults (Step 6) ──────────────────────────────────────
+  -- ── hover.images defaults ───────────────────────────────────────
+
+  describe("hover.images defaults", function()
+    it("has hover.images.enabled = true by default", function()
+      config.setup()
+      local images = config.options.hover.images
+      assert.is_not_nil(images)
+      assert.is_true(images.enabled)
+    end)
+
+    it("accepts hover.images.enabled override", function()
+      config.setup({
+        hover = {
+          images = { enabled = false },
+        },
+      })
+      assert.is_false(config.options.hover.images.enabled)
+      assert.is_true(config.options.hover.diagrams.enabled) -- unaffected
+    end)
+
+    it("deep-extends hover.images without losing other hover keys", function()
+      config.setup({
+        hover = {
+          images = { enabled = false },
+          debounce_ms = 300,
+        },
+      })
+      assert.is_false(config.options.hover.images.enabled)
+      assert.is_true(config.options.hover.diagrams.enabled) -- from default
+      assert.are.equal(300, config.options.hover.debounce_ms)
+    end)
+  end)
+
+  -- ── debug defaults ──────────────────────────────────────────────
 
   describe("debug defaults", function()
     it("has all debug keys with correct defaults", function()
@@ -131,7 +187,75 @@ describe("config", function()
     end)
   end)
 
-  -- ── sixel + popup config (Step 6) ─────────────────────────────────
+  -- ── sixel + popup config ─────────────────────────────────────────
+
+  -- ── renderer_options.mermaid defaults ────────────────────────────
+
+  describe("renderer_options.mermaid defaults", function()
+    it("has renderer_options with mermaid key", function()
+      config.setup()
+      local ro = config.options.renderer_options
+      assert.is_not_nil(ro)
+      assert.is_not_nil(ro.mermaid)
+    end)
+
+    it("default renderer is mmdr", function()
+      config.setup()
+      assert.are.equal("mmdr", config.options.renderer_options.mermaid.renderer)
+    end)
+
+    it("mmdr defaults are correct", function()
+      config.setup()
+      local mmdr = config.options.renderer_options.mermaid.mmdr
+      assert.is_not_nil(mmdr)
+      assert.is_nil(mmdr.width)
+      assert.is_nil(mmdr.height)
+      assert.is_false(mmdr.fast_text)
+      assert.is_nil(mmdr.config_file)
+    end)
+
+    it("min_popup_width defaults to 40", function()
+      config.setup()
+      assert.are.equal(40, config.options.renderer_options.mermaid.min_popup_width)
+    end)
+
+    it("mmdc defaults are correct", function()
+      config.setup()
+      local mmdc = config.options.renderer_options.mermaid.mmdc
+      assert.is_not_nil(mmdc)
+      assert.is_nil(mmdc.theme)
+      assert.is_nil(mmdc.background)
+      assert.is_nil(mmdc.scale)
+      assert.is_nil(mmdc.width)
+      assert.is_nil(mmdc.height)
+      assert.is_nil(mmdc.cli_args)
+    end)
+
+    it("deep-extends renderer_options correctly", function()
+      config.setup({
+        renderer_options = {
+          mermaid = {
+            renderer = "mmdc",
+            mmdr = { width = 800 },
+            mmdc = { theme = "dark" },
+          },
+        },
+      })
+      local m = config.options.renderer_options.mermaid
+      assert.are.equal("mmdc", m.renderer)
+      assert.are.equal(800, m.mmdr.width)
+      assert.is_nil(m.mmdr.height) -- from default
+      assert.is_false(m.mmdr.fast_text) -- from default
+      assert.is_nil(m.mmdr.config_file) -- from default
+      assert.are.equal(40, m.min_popup_width) -- from default
+      assert.are.equal("dark", m.mmdc.theme)
+      assert.is_nil(m.mmdc.background) -- from default
+      assert.is_nil(m.mmdc.scale) -- from default
+      assert.is_nil(m.mmdc.width) -- from default
+      assert.is_nil(m.mmdc.height) -- from default
+      assert.is_nil(m.mmdc.cli_args) -- from default
+    end)
+  end)
 
   describe("sixel config", function()
     it("sixel_pixel_scale defaults to 1.0", function()
