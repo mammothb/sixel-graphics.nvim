@@ -224,7 +224,9 @@ function M.find_diagram_at_row(buf, cursor_row)
   end
 
   for _, diagram in ipairs(diagrams) do
-    -- treesitter ranges are [start, end) — end_row is exclusive
+    -- fenced_code_block is a multi-row block node; treesitter end_row is
+    -- exclusive (points to the row after closing ```). Use < to avoid
+    -- triggering on the blank line after the fence.
     if diagram.range.start_row <= cursor_row and cursor_row < diagram.range.end_row then
       logger.debug(function()
         return string.format("find_diagram_at_row: row=%d hit renderer=%s", cursor_row, diagram.renderer_id)
@@ -251,8 +253,10 @@ function M.find_image_at_row(buf, cursor_row)
   end
 
   for _, img in ipairs(images) do
-    -- treesitter ranges are [start, end) — end_row is exclusive
-    if img.range.start_row <= cursor_row and cursor_row < img.range.end_row then
+    -- Inline image nodes are single-row: treesitter sets end_row == start_row.
+    -- With <=, cursor_row == start_row matches, cursor_row == start_row+1
+    -- does not (since start_row+1 <= start_row is false). Safe.
+    if img.range.start_row <= cursor_row and cursor_row <= img.range.end_row then
       logger.debug(function()
         return string.format("find_image_at_row: row=%d hit url=%s", cursor_row, img.url)
       end)
