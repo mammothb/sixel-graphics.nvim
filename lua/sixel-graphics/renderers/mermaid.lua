@@ -97,14 +97,42 @@ local function _build_mmdr_command(temp_path, cache_path, mmdr_opts)
 end
 M._build_mmdr_command = _build_mmdr_command
 
----Render a mermaid diagram source to PNG.
+---@private
+---Run a shell command via vim.fn.system() and return both output and exit code.
+---Extracted for testability — tests mock this instead of vim.fn.system()
+---to control exit codes without touching read-only vim.v.shell_error.
+---@param cmd_args string[]  Command array
+---@return string output
+---@return number exit_code
+local function _run_system(cmd_args)
+  local output = vim.fn.system(cmd_args)
+  return output, vim.v.shell_error
+end
+M._run_system = _run_system
+
+---@private
+---Resolve the bundled mmdr-config.json path (shipped with the plugin).
+---Used as default config_file when user doesn't specify one, so fonts
+---render correctly on Linux systems where mmdr's default fonts are absent.
+---@return string|nil  Absolute path to bundled config, or nil if plugin dir can't be resolved
+local function _bundled_config_path()
+  -- Derive plugin root from this file's path
+  local source = debug.getinfo(1, "S").source
+  local prefix = source:match("@(.*)/lua/sixel%-graphics/renderers/mermaid%.lua$")
+  if prefix then
+    return prefix .. "/lua/sixel-graphics/renderers/mmdr-config.json"
+  end
+  return nil
+end
+
+---Render a mermaid diagram source to a PNG file.
 ---
----mmdr path (sync, implemented): hash → cache check → vim.fn.system() → file_path
----mmdc path (async, NOT YET IMPLEMENTED): returns nil with notification
+---mmdr path (sync): hash → cache check → write temp → vim.fn.system() → file_path.
+---mmdc path (async): NOT YET IMPLEMENTED — returns nil with notification (Step D3).
 ---
 ---@param source string   Diagram source code
 ---@param options table   renderer_options.mermaid from config
----@return { file_path: string }?  nil if renderer not installed or not yet implemented
+---@return { file_path: string }?  nil on failure or not yet implemented
 function M.render(source, options)
   options = options or {}
   local renderer_name = options.renderer or "mmdr"
@@ -119,8 +147,72 @@ function M.render(source, options)
     return nil
   end
 
-  logger.debug("mermaid.render: not yet implemented (mmdr path coming in D2.3-D2.5)")
-  return nil
+  -- 1. Hash source (includes renderer name for separate caches)
+  local hash = _compute_hash(source, "mmdr")
+
+  -- 2. Check cache
+  local cached = _check_cache(hash)
+  if cached then
+    logger.debug(function()
+      return "mermaid.render: cache hit " .. hash
+    end)
+    return { file_path = cached }
+  end
+
+  -- 3. Check mmdr executable
+  if vim.fn.executable("mmdr") == 0 then
+    vim.notify(
+      "sixel-graphics: mmdr not found in PATH. Install via: cargo install mermaid-rs-renderer",
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  -- 4. Write source to temp file
+  local temp_path = vim.fn.tempname() .. ".mmd"
+  local lines = vim.split(source, "\n")
+  vim.fn.writefile(lines, temp_path)
+
+  -- 5. Build command and run synchronously
+  local cache_path = _get_cache_path(hash)
+  local mmdr_opts = vim.deepcopy(options.mmdr or {})
+
+  -- Default config_file to bundled font config if user didn't set one
+  if not mmdr_opts.config_file then
+    mmdr_opts.config_file = _bundled_config_path()
+  end
+
+  local cmd_args = _build_mmdr_command(temp_path, cache_path, mmdr_opts)
+
+  logger.debug(function()
+    return "mermaid.render: running: " .. table.concat(cmd_args, " ")
+  end)
+
+  local output, exit_code = M._run_system(cmd_args)
+
+  -- 6. Clean up temp file
+  vim.fn.delete(temp_path)
+
+  -- 7. Check result
+  if exit_code ~= 0 then
+    local stderr = tostring(output):gsub("^%s+", ""):gsub("%s+$", "")
+    vim.notify(
+      "sixel-graphics: mmdr failed (exit " .. exit_code .. "):" .. (#stderr > 0 and "\n" .. stderr or ""),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  if vim.fn.filereadable(cache_path) == 0 then
+    vim.notify("sixel-graphics: mmdr did not produce output file", vim.log.levels.ERROR)
+    return nil
+  end
+
+  logger.debug(function()
+    return "mermaid.render: success → " .. cache_path
+  end)
+
+  return { file_path = cache_path }
 end
 
 return M

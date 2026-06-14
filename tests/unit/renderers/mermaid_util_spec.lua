@@ -139,7 +139,7 @@ describe("mermaid renderer — utilities", function()
         return "/cache"
       end
       vim.fn.mkdir = function() end
-      vim.fn.filereadable = function(path)
+      vim.fn.filereadable = function(_path)
         return 1
       end
 
@@ -152,7 +152,7 @@ describe("mermaid renderer — utilities", function()
         return "/cache"
       end
       vim.fn.mkdir = function() end
-      vim.fn.filereadable = function(path)
+      vim.fn.filereadable = function(_path)
         return 0
       end
 
@@ -231,6 +231,166 @@ describe("mermaid renderer — utilities", function()
       assert.is_not_nil(string.find(joined, "^mmdr "))
       assert.is_nil(string.find(joined, "%-w "))
       assert.is_nil(string.find(joined, "%-H "))
+    end)
+  end)
+
+  -- ── render (mmdr path, mocked) ──────────────────────────────────
+
+  describe("M.render (mmdr sync path)", function()
+    local _executable, _system, _tempname, _writefile, _delete, _notify
+    local _original_run_system
+
+    before_each(function()
+      _executable = vim.fn.executable
+      _system = vim.fn.system
+      _tempname = vim.fn.tempname
+      _writefile = vim.fn.writefile
+      _delete = vim.fn.delete
+      _notify = vim.notify
+
+      -- Stub cache directory (inherits mocked stdpath from outer before_each)
+      vim.fn.stdpath = function()
+        return "/fake-cache"
+      end
+      vim.fn.mkdir = function() end
+      vim.fn.sha256 = function()
+        return string.rep("0", 64)
+      end
+      vim.fn.filereadable = function(_path)
+        return 0
+      end -- cache miss by default
+
+      -- Reload module
+      package.loaded["sixel-graphics.renderers.mermaid"] = nil
+      mermaid = require("sixel-graphics.renderers.mermaid")
+      _original_run_system = mermaid._run_system
+    end)
+
+    after_each(function()
+      vim.fn.executable = _executable
+      vim.fn.system = _system
+      vim.fn.tempname = _tempname
+      vim.fn.writefile = _writefile
+      vim.fn.delete = _delete
+      vim.notify = _notify
+      if mermaid then
+        mermaid._run_system = _original_run_system
+      end
+    end)
+
+    it("returns cache hit when file exists", function()
+      vim.fn.filereadable = function(_path)
+        return 1 -- cached
+      end
+      vim.fn.executable = function()
+        error("should not check executable on cache hit")
+      end
+
+      local result = mermaid.render("flowchart LR; A-->B", { renderer = "mmdr" })
+      assert.is_not_nil(result)
+      assert.is_not_nil(string.find(result.file_path, "%.png$"))
+    end)
+
+    it("returns nil when mmdr not installed", function()
+      vim.fn.filereadable = function(_path)
+        return 0
+      end
+      vim.fn.executable = function(cmd)
+        assert.are.equal("mmdr", cmd)
+        return 0 -- not found
+      end
+
+      local notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+
+      local result = mermaid.render("source", { renderer = "mmdr" })
+      assert.is_nil(result)
+      assert.are.equal(1, #notifications)
+      assert.is_not_nil(string.find(notifications[1].msg, "mmdr not found"))
+      assert.are.equal(vim.log.levels.ERROR, notifications[1].level)
+    end)
+
+    it("returns nil when mmdr fails (non-zero exit)", function()
+      vim.fn.executable = function()
+        return 1
+      end
+      vim.fn.tempname = function()
+        return "/tmp/neoXXXXXX"
+      end
+      vim.fn.writefile = function() end
+      vim.fn.delete = function() end
+
+      mermaid._run_system = function(_cmd)
+        return "syntax error in diagram", 1
+      end
+
+      local notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+
+      local result = mermaid.render("bad syntax", { renderer = "mmdr" })
+      assert.is_nil(result)
+      assert.are.equal(1, #notifications)
+      assert.is_not_nil(string.find(notifications[1].msg, "mmdr failed"))
+      assert.is_not_nil(string.find(notifications[1].msg, "syntax error"))
+    end)
+
+    it("returns file_path on successful render", function()
+      vim.fn.executable = function()
+        return 1
+      end
+      vim.fn.tempname = function()
+        return "/tmp/neoXXXXXX"
+      end
+      vim.fn.writefile = function() end
+      vim.fn.delete = function() end
+
+      -- filereadable: first call (cache check) returns 0, second call (post-render) returns 1
+      local call_count = 0
+      vim.fn.filereadable = function(_path)
+        call_count = call_count + 1
+        return call_count >= 2 and 1 or 0
+      end
+
+      mermaid._run_system = function(_cmd)
+        return "", 0
+      end
+
+      local result = mermaid.render("flowchart LR; A-->B", {
+        renderer = "mmdr",
+        mmdr = { width = 800, fast_text = true },
+      })
+
+      assert.is_not_nil(result)
+      assert.is_not_nil(string.find(result.file_path, "%.png$"))
+      assert.is_not_nil(string.find(result.file_path, "/fake%-cache/sixel%-graphics/mermaid/"))
+    end)
+
+    it("notifies and returns nil for mmdc path (not implemented)", function()
+      local notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+
+      local result = mermaid.render("source", { renderer = "mmdc" })
+      assert.is_nil(result)
+      assert.are.equal(1, #notifications)
+      assert.is_not_nil(string.find(notifications[1].msg, "not yet implemented"))
+    end)
+
+    it("notifies and returns nil for unknown renderer", function()
+      local notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+
+      local result = mermaid.render("source", { renderer = "plantuml" })
+      assert.is_nil(result)
+      assert.are.equal(1, #notifications)
+      assert.is_not_nil(string.find(notifications[1].msg, "unknown renderer"))
     end)
   end)
 end)
