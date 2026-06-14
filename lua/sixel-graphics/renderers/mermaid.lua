@@ -98,6 +98,69 @@ end
 M._build_mmdr_command = _build_mmdr_command
 
 ---@private
+---Build the mmdc command array from temp input path, cache output path, and options.
+---Mirrors _build_mmdr_command but for mmdc's different CLI flags.
+---
+---mmdc CLI reference (from mmdc --help, 2026-06-14):
+---  -i, --input <input>              Input mermaid file
+---  -o, --output [output]            Output file
+---  -e, --outputFormat [format]      Output format: svg, png, pdf
+---  -b, --backgroundColor [bg]       Background color (default: "white")
+---  -t, --theme [theme]              Theme: default, forest, dark, neutral
+---  -s, --scale [scale]              Puppeteer scale factor (default: 1)
+---  -w, --width [width]              Width of the page (default: 800)
+---  -H, --height [height]            Height of the page (default: 600)
+---
+---@param temp_path string    Path to temporary .mmd input file
+---@param cache_path string   Path to output .png file
+---@param mmdc_opts table     options.renderer_options.mermaid.mmdc
+---@return string[]  Command array suitable for vim.fn.jobstart()
+local function _build_mmdc_command(temp_path, cache_path, mmdc_opts)
+  mmdc_opts = mmdc_opts or {}
+  local args = { "mmdc" }
+
+  -- cli_args first (e.g., {"--no-sandbox"} — must come before -i/-o)
+  if mmdc_opts.cli_args then
+    for _, arg in ipairs(mmdc_opts.cli_args) do
+      table.insert(args, arg)
+    end
+  end
+
+  -- Required flags
+  table.insert(args, "-i")
+  table.insert(args, temp_path)
+  table.insert(args, "-o")
+  table.insert(args, cache_path)
+  table.insert(args, "-e")
+  table.insert(args, "png")
+
+  -- Optional flags
+  if mmdc_opts.background then
+    table.insert(args, "-b")
+    table.insert(args, mmdc_opts.background)
+  end
+  if mmdc_opts.theme then
+    table.insert(args, "-t")
+    table.insert(args, mmdc_opts.theme)
+  end
+  if mmdc_opts.scale then
+    table.insert(args, "-s")
+    table.insert(args, tostring(mmdc_opts.scale))
+  end
+  if mmdc_opts.width then
+    table.insert(args, "-w")
+    table.insert(args, tostring(mmdc_opts.width))
+  end
+  if mmdc_opts.height then
+    table.insert(args, "-H")
+    table.insert(args, tostring(mmdc_opts.height))
+  end
+
+  return args
+end
+M._build_mmdc_command = _build_mmdc_command
+
+---@private
 ---Run a shell command via vim.fn.system() and return both output and exit code.
 ---Extracted for testability — tests mock this instead of vim.fn.system()
 ---to control exit codes without touching read-only vim.v.shell_error.

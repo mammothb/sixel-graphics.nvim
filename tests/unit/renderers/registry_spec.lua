@@ -14,28 +14,6 @@ describe("renderers registry", function()
     assert.is_function(mermaid.render)
   end)
 
-  it("mermaid.render returns nil for mmdr path (stub, not yet implemented)", function()
-    local mermaid = require("sixel-graphics.renderers.mermaid")
-    local result = mermaid.render("flowchart LR; A-->B", { renderer = "mmdr" })
-    assert.is_nil(result)
-  end)
-
-  it("mermaid.render notifies and returns nil for mmdc path (not implemented)", function()
-    local _notify = vim.notify
-    local notifications = {}
-    vim.notify = function(msg, level)
-      table.insert(notifications, { msg = msg, level = level })
-    end
-
-    local mermaid = require("sixel-graphics.renderers.mermaid")
-    local result = mermaid.render("flowchart LR; A-->B", { renderer = "mmdc" })
-    assert.is_nil(result)
-    assert.are.equal(1, #notifications)
-    assert.is_not_nil(string.find(notifications[1].msg, "not yet implemented"))
-
-    vim.notify = _notify
-  end)
-
   it("mermaid.render notifies and returns nil for unknown renderer", function()
     local _notify = vim.notify
     local notifications = {}

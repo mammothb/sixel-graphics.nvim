@@ -234,6 +234,120 @@ describe("mermaid renderer — utilities", function()
     end)
   end)
 
+  -- ── _build_mmdc_command ─────────────────────────────────────────
+
+  describe("_build_mmdc_command", function()
+    it("builds minimal command with required flags only", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {})
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "^mmdc "))
+      assert.is_not_nil(string.find(joined, "%-i /tmp/in%.mmd"))
+      assert.is_not_nil(string.find(joined, "%-o /cache/out%.png"))
+      assert.is_not_nil(string.find(joined, "%-e png"))
+      -- No optional flags
+      assert.is_nil(string.find(joined, "%-b "))
+      assert.is_nil(string.find(joined, "%-t "))
+      assert.is_nil(string.find(joined, "%-s "))
+      assert.is_nil(string.find(joined, "%-w "))
+      assert.is_nil(string.find(joined, "%-H "))
+    end)
+
+    it("includes -b when background is set", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        background = "transparent",
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-b transparent"))
+    end)
+
+    it("includes -t when theme is set", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        theme = "dark",
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-t dark"))
+    end)
+
+    it("includes -s when scale is set", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        scale = 2,
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-s 2"))
+    end)
+
+    it("includes -w when width is set", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        width = 1200,
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-w 1200"))
+    end)
+
+    it("includes -H when height is set", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        height = 900,
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-H 900"))
+    end)
+
+    it("prepends cli_args before -i/-o", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        cli_args = { "--no-sandbox", "--quiet" },
+      })
+      local joined = table.concat(args, " ")
+      local no_sandbox_pos = string.find(joined, "%-%-no%-sandbox")
+      local quiet_pos = string.find(joined, "%-%-quiet")
+      local i_pos = string.find(joined, "%-i ")
+      assert.is_true(no_sandbox_pos < i_pos, "--no-sandbox must come before -i")
+      assert.is_true(quiet_pos < i_pos, "--quiet must come before -i")
+    end)
+
+    it("always includes -e png", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        background = "white",
+        scale = 3,
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-e png"))
+    end)
+
+    it("combines all options", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
+        theme = "forest",
+        background = "#F0F0F0",
+        scale = 2,
+        width = 1600,
+        height = 1200,
+        cli_args = { "--no-sandbox" },
+      })
+      local joined = table.concat(args, " ")
+
+      -- cli_args first
+      local ns_pos = string.find(joined, "%-%-no%-sandbox")
+      local i_pos = string.find(joined, "%-i ")
+      assert.is_true(ns_pos < i_pos)
+
+      -- All flags present
+      assert.is_not_nil(string.find(joined, "%-t forest"))
+      assert.is_not_nil(string.find(joined, "%-b #F0F0F0"))
+      assert.is_not_nil(string.find(joined, "%-s 2"))
+      assert.is_not_nil(string.find(joined, "%-w 1600"))
+      assert.is_not_nil(string.find(joined, "%-H 1200"))
+      assert.is_not_nil(string.find(joined, "%-e png"))
+    end)
+
+    it("handles nil options gracefully", function()
+      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", nil)
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "^mmdc "))
+      assert.is_not_nil(string.find(joined, "%-i "))
+      assert.is_not_nil(string.find(joined, "%-o "))
+      assert.is_nil(string.find(joined, "%-b ")) -- no optional flags
+    end)
+  end)
+
   -- ── render (mmdr path, mocked) ──────────────────────────────────
 
   describe("M.render (mmdr sync path)", function()
@@ -367,18 +481,6 @@ describe("mermaid renderer — utilities", function()
       assert.is_not_nil(result)
       assert.is_not_nil(string.find(result.file_path, "%.png$"))
       assert.is_not_nil(string.find(result.file_path, "/fake%-cache/sixel%-graphics/mermaid/"))
-    end)
-
-    it("notifies and returns nil for mmdc path (not implemented)", function()
-      local notifications = {}
-      vim.notify = function(msg, level)
-        table.insert(notifications, { msg = msg, level = level })
-      end
-
-      local result = mermaid.render("source", { renderer = "mmdc" })
-      assert.is_nil(result)
-      assert.are.equal(1, #notifications)
-      assert.is_not_nil(string.find(notifications[1].msg, "not yet implemented"))
     end)
 
     it("notifies and returns nil for unknown renderer", function()
