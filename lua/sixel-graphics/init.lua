@@ -91,20 +91,6 @@ function M.is_sixel_supported()
   return require("sixel-graphics.backends.sixel").is_sixel_supported()
 end
 
----Send a hardcoded 4-color sixel test pattern for visual verification.
----@deprecated Use render_image_at_cursor instead
----@param x? number  Terminal column (0-indexed)
----@param y? number  Terminal row (0-indexed)
-function M.send_test_sixel(x, y)
-  require("sixel-graphics.backends.sixel").send_test_sixel(x, y)
-end
-
----Send the test pattern at the current Neovim cursor position.
----@deprecated Use render_image_at_cursor instead
-function M.send_test_sixel_at_cursor()
-  require("sixel-graphics.backends.sixel").send_test_sixel_at_cursor()
-end
-
 ---Check if ImageMagick is available for image processing.
 ---@return boolean
 function M.magick_is_available()
@@ -265,61 +251,6 @@ local function floating_win_term_origin(win)
   return screen_col, screen_row
 end
 
----Create a floating window at cursor and render a hardcoded sixel test pattern
----inside it. Verifies sixel can render at the correct terminal position
----within a floating window.
----
----Usage:
----```vim
----:lua require("sixel-graphics").show_test_popup()
----```
----
----@return number|nil win  Floating window handle
----@return number|nil buf  Buffer handle
-function M.show_test_popup()
-  guard_setup()
-
-  if not M.state.enabled then
-    vim.notify("sixel-graphics: rendering is disabled", vim.log.levels.WARN)
-    return nil, nil
-  end
-
-  -- 1. Create floating window below cursor
-  local buf = vim.api.nvim_create_buf(false, true)
-  local width = 20
-  local height = 10
-
-  local win = vim.api.nvim_open_win(buf, false, {
-    relative = "cursor",
-    row = 1, -- appear below cursor
-    col = 0, -- same column as cursor
-    width = width,
-    height = height,
-    style = "minimal",
-    border = "single",
-  })
-
-  -- 2. Compute terminal coordinates for the content area
-  local term_col, term_row = floating_win_term_origin(win)
-
-  -- 3. Send hardcoded test sixel at computed position
-  require("sixel-graphics.backends.sixel").send_test_sixel(term_col, term_row)
-
-  local debug_pos = vim.api.nvim_win_get_position(win)
-  vim.notify(
-    string.format(
-      "sixel-graphics: test popup at term (%d,%d), screen (%d,%d)",
-      term_col,
-      term_row,
-      debug_pos[2], -- screen col
-      debug_pos[1] -- screen row
-    ),
-    vim.log.levels.INFO
-  )
-
-  return win, buf
-end
-
 ---Show an image in a floating popup window at the cursor position.
 ---The window is sized to fit the image while preserving aspect ratio,
 ---constrained to at most ~50% of screen dimensions and config limits.
@@ -470,58 +401,6 @@ function M.show_image_popup(image_path)
   end)
 
   return win, image_id
-end
-
----Check if the cursor is currently on a line with a markdown image.
----Prints the image URL to :messages. For manual verification.
-function M.check_cursor_on_image()
-  guard_setup()
-
-  local buf = vim.api.nvim_get_current_buf()
-  local ft = vim.bo[buf].filetype
-  if ft ~= "markdown" then
-    vim.notify("sixel-graphics: not a markdown buffer", vim.log.levels.INFO)
-    return
-  end
-
-  local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf)
-  if match then
-    vim.notify("sixel-graphics: image found: " .. match.url, vim.log.levels.INFO)
-  else
-    vim.notify("sixel-graphics: no image on this line", vim.log.levels.INFO)
-  end
-end
-
----Enable debug CursorMoved logging for hover detection verification.
----Logs to :messages whenever the cursor lands on a markdown image line.
----Call stop_hover_debug() to disable.
-function M.start_hover_debug()
-  guard_setup()
-
-  local group = vim.api.nvim_create_augroup("SixelGraphicsHoverDebug", { clear = true })
-
-  vim.api.nvim_create_autocmd({ "CursorMoved" }, {
-    group = group,
-    callback = function(args)
-      local ft = vim.bo[args.buf].filetype
-      if ft ~= "markdown" then
-        return
-      end
-
-      local match = require("sixel-graphics.integrations.markdown").find_image_at_row(args.buf)
-      if match then
-        vim.notify("[hover] " .. match.url, vim.log.levels.INFO)
-      end
-    end,
-  })
-
-  vim.notify("sixel-graphics: hover debug enabled (CursorMoved logging)", vim.log.levels.INFO)
-end
-
----Disable the debug CursorMoved logging.
-function M.stop_hover_debug()
-  pcall(vim.api.nvim_del_augroup_by_name, "SixelGraphicsHoverDebug")
-  vim.notify("sixel-graphics: hover debug disabled", vim.log.levels.INFO)
 end
 
 -- Active popup state (single-popup: only one hover popup at a time)

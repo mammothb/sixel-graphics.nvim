@@ -1,8 +1,7 @@
----Unit tests for init.lua hover/popup functions:
----check_cursor_on_image, close_popup.
+---Unit tests for init.lua hover/popup functions: close_popup.
 ---
 ---Mocks Neovim APIs and markdown integration to isolate logic
----from terminal/fileystem side effects.
+---from terminal/filesystem side effects.
 
 -- Pre-load mocks to prevent side effects during init.lua loading
 package.loaded["sixel-graphics.backends.sixel"] = {
@@ -66,14 +65,10 @@ local M = require("sixel-graphics")
 
 describe("init hover", function()
   -- Save originals for restoration
-  local _get_current_buf
   local _notify
-  local _bo
 
   before_each(function()
-    _get_current_buf = vim.api.nvim_get_current_buf
     _notify = vim.notify
-    _bo = vim.bo
 
     -- Set up state so guard_setup passes
     M.has_setup = true
@@ -94,102 +89,7 @@ describe("init hover", function()
   end)
 
   after_each(function()
-    vim.api.nvim_get_current_buf = _get_current_buf
     vim.notify = _notify
-    vim.bo = _bo
-  end)
-
-  -- ── check_cursor_on_image ───────────────────────────────────────────
-
-  describe("check_cursor_on_image()", function()
-    it("notifies 'not a markdown buffer' for non-markdown filetype", function()
-      vim.api.nvim_get_current_buf = function()
-        return 1
-      end
-      -- vim.bo is a table indexed by buffer number
-      vim.bo = setmetatable({}, {
-        __index = function(_, buf)
-          if buf == 1 then
-            return { filetype = "lua" }
-          end
-          return {}
-        end,
-      })
-
-      local msg, level = nil, nil
-      vim.notify = function(m, l)
-        msg = m
-        level = l
-      end
-
-      M.check_cursor_on_image()
-
-      assert.is_not_nil(msg:match("not a markdown buffer"))
-      assert.are.equal(vim.log.levels.INFO, level)
-    end)
-
-    it("notifies 'no image on this line' for markdown without match", function()
-      vim.api.nvim_get_current_buf = function()
-        return 1
-      end
-      vim.bo = setmetatable({}, {
-        __index = function(_, buf)
-          if buf == 1 then
-            return { filetype = "markdown" }
-          end
-          return {}
-        end,
-      })
-
-      -- find_image_at_row already returns nil (from pre-loaded mock)
-
-      local msg, level = nil, nil
-      vim.notify = function(m, l)
-        msg = m
-        level = l
-      end
-
-      M.check_cursor_on_image()
-
-      assert.is_not_nil(msg:match("no image on this line"))
-      assert.are.equal(vim.log.levels.INFO, level)
-    end)
-
-    it("notifies 'image found: url' for markdown with a match", function()
-      vim.api.nvim_get_current_buf = function()
-        return 1
-      end
-      vim.bo = setmetatable({}, {
-        __index = function(_, buf)
-          if buf == 1 then
-            return { filetype = "markdown" }
-          end
-          return {}
-        end,
-      })
-
-      -- Inject a match into the mock
-      local markdown = require("sixel-graphics.integrations.markdown")
-      markdown.find_image_at_row = function(_buf)
-        return { url = "./cat.png", range = { start_row = 3, start_col = 0, end_row = 3, end_col = 15 } }
-      end
-
-      local msg, level = nil, nil
-      vim.notify = function(m, l)
-        msg = m
-        level = l
-      end
-
-      M.check_cursor_on_image()
-
-      assert.is_not_nil(msg:match("image found: ./cat%.png"))
-      assert.are.equal(vim.log.levels.INFO, level)
-
-      -- Restore
-      markdown.find_image_at_row = function()
-        return nil
-      end
-    end)
   end)
 
   -- ── close_popup ─────────────────────────────────────────────────────
