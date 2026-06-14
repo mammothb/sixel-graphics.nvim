@@ -46,10 +46,12 @@ jobs:
             liblua5.1-dev \
             lua5.1 \
             luarocks
+          echo "${HOME}/.luarocks/bin" >> "${GITHUB_PATH}"
           eval "$(luarocks path --lua-version=5.1)"
+          echo "LUA_PATH=${LUA_PATH}" >> "${GITHUB_ENV}"
+          echo "LUA_CPATH=${LUA_CPATH}" >> "${GITHUB_ENV}"
       - name: "Setup - vusted"
         run: |
           luarocks --local --lua-version=5.1 install vusted
-          echo "${HOME}/.luarocks/bin" >> "${GITHUB_PATH}"
       - name: "Run tests"
         run: make test
