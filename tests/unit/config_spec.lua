@@ -68,4 +68,90 @@ describe("config", function()
       assert.are.equal(2.0, config.scale)
     end)
   end)
+
+  -- ── hover defaults (Step 6) ──────────────────────────────────────
+
+  describe("hover defaults", function()
+    it("has all hover keys with correct defaults", function()
+      config.setup()
+      local hover = config.options.hover
+      assert.is_not_nil(hover)
+      assert.is_true(hover.enabled)
+      assert.are.equal(150, hover.debounce_ms)
+      assert.are.equal(0.5, hover.max_screen_fraction)
+      assert.are.same({ "markdown" }, hover.filetypes)
+    end)
+
+    it("deep-extends hover overrides while keeping non-overridden keys", function()
+      config.setup({
+        hover = {
+          debounce_ms = 300,
+        },
+      })
+      local hover = config.options.hover
+      assert.is_true(hover.enabled) -- from default
+      assert.are.equal(300, hover.debounce_ms) -- user override
+      assert.are.equal(0.5, hover.max_screen_fraction) -- from default
+      assert.are.same({ "markdown" }, hover.filetypes) -- from default
+    end)
+
+    it("deep-extends filetypes override", function()
+      config.setup({
+        hover = {
+          filetypes = { "markdown", "asciidoc" },
+        },
+      })
+      assert.are.same({ "markdown", "asciidoc" }, config.options.hover.filetypes)
+    end)
+  end)
+
+  -- ── debug defaults (Step 6) ──────────────────────────────────────
+
+  describe("debug defaults", function()
+    it("has all debug keys with correct defaults", function()
+      config.setup()
+      local debug = config.options.debug
+      assert.is_not_nil(debug)
+      assert.is_false(debug.enabled)
+      assert.are.equal("info", debug.level)
+      assert.is_nil(debug.file_path)
+    end)
+
+    it("merges debug overrides", function()
+      config.setup({
+        debug = {
+          enabled = true,
+          file_path = "/tmp/mylog.log",
+        },
+      })
+      local debug = config.options.debug
+      assert.is_true(debug.enabled)
+      assert.are.equal("/tmp/mylog.log", debug.file_path)
+      assert.are.equal("info", debug.level) -- from default
+    end)
+  end)
+
+  -- ── sixel + popup config (Step 6) ─────────────────────────────────
+
+  describe("sixel config", function()
+    it("sixel_pixel_scale defaults to 1.0", function()
+      config.setup()
+      assert.are.equal(1.0, config.options.sixel_pixel_scale)
+    end)
+
+    it("popup_render_delay_ms defaults to 16", function()
+      config.setup()
+      assert.are.equal(16, config.options.popup_render_delay_ms)
+    end)
+
+    it("accepts sixel_pixel_scale override", function()
+      config.setup({ sixel_pixel_scale = 0.625 })
+      assert.are.equal(0.625, config.options.sixel_pixel_scale)
+    end)
+
+    it("accepts popup_render_delay_ms override", function()
+      config.setup({ popup_render_delay_ms = 32 })
+      assert.are.equal(32, config.options.popup_render_delay_ms)
+    end)
+  end)
 end)

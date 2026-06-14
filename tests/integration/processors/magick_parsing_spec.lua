@@ -39,7 +39,7 @@ describe("magick_cli output parsing", function()
         { output = "PNG\n" },
       })
       -- Use real test file for filereadable check
-      local result = proc.get_format("test.png")
+      local result = proc.get_format("tests/fixtures/test.png")
       assert.are.equal("png", result)
     end)
 
@@ -47,7 +47,7 @@ describe("magick_cli output parsing", function()
       vim.fn.system = queued_system({
         { output = "JPEG  \n  " },
       })
-      local result = proc.get_format("test.png")
+      local result = proc.get_format("tests/fixtures/test.png")
       -- %s+$ strips all trailing whitespace (spaces, newlines)
       assert.are.equal("jpeg", result)
     end)
@@ -75,7 +75,7 @@ describe("magick_cli output parsing", function()
         { output = "png\n" },
         { output = "640x480\n" },
       })
-      local dims = proc.get_dimensions("test.png")
+      local dims = proc.get_dimensions("tests/fixtures/test.png")
       assert.is_not_nil(dims)
       assert.are.equal(640, dims.width)
       assert.are.equal(480, dims.height)
@@ -86,7 +86,7 @@ describe("magick_cli output parsing", function()
         { output = "png\n" },
         { output = "3840x2160\n" },
       })
-      local dims = proc.get_dimensions("test.png")
+      local dims = proc.get_dimensions("tests/fixtures/test.png")
       assert.are.equal(3840, dims.width)
       assert.are.equal(2160, dims.height)
     end)
@@ -96,7 +96,7 @@ describe("magick_cli output parsing", function()
         { output = "png\n" },
         { output = "1x1\n" },
       })
-      local dims = proc.get_dimensions("test.png")
+      local dims = proc.get_dimensions("tests/fixtures/test.png")
       assert.are.equal(1, dims.width)
       assert.are.equal(1, dims.height)
     end)
@@ -117,7 +117,7 @@ describe("magick_cli output parsing", function()
         end
       end
 
-      local dims = proc.get_dimensions("test.png")
+      local dims = proc.get_dimensions("tests/fixtures/test.png")
       assert.is_not_nil(dims)
       assert.are.equal(100, dims.width)
       assert.are.equal(100, dims.height)
@@ -145,7 +145,7 @@ describe("magick_cli output parsing", function()
         { output = "png\n" },
         { output = "  800x600  \n" },
       })
-      local dims = proc.get_dimensions("test.png")
+      local dims = proc.get_dimensions("tests/fixtures/test.png")
       assert.is_nil(dims)
     end)
   end)

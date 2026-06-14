@@ -94,7 +94,7 @@ describe("init", function()
       assert.is_false(M.state.enabled)
     end)
 
-    it("enable() re-renders tracked images", function()
+    it("enable() does not touch tracked images (hover popups are cursor-triggered)", function()
       -- Spy on backend.render
       local backend = require("sixel-graphics.backends.sixel")
       local spy = require("luassert.spy").new(function()
@@ -102,7 +102,7 @@ describe("init", function()
       end)
       backend.render = spy
 
-      -- Add a rendered image to state
+      -- Add rendered images to state (simulating hover popup or manual render)
       M.state.images["/tmp/img.png@0,0"] = {
         id = "/tmp/img.png@0,0",
         path = "/tmp/img.png",
@@ -112,7 +112,6 @@ describe("init", function()
         height = 20,
         is_rendered = true,
       }
-      -- Add an unrendered image (should NOT be re-rendered)
       M.state.images["/tmp/other.png@5,5"] = {
         id = "/tmp/other.png@5,5",
         path = "/tmp/other.png",
@@ -126,9 +125,8 @@ describe("init", function()
       M.state.enabled = false
       M.enable()
 
-      -- Only the rendered image should be re-rendered
-      assert.spy(spy).was_called(1)
-      assert.spy(spy).was_called_with("/tmp/img.png", 10, 3, 40, 20)
+      -- enable() is a pure flag setter; rendering happens on CursorMoved
+      assert.spy(spy).was_called(0)
     end)
 
     it("enable() does not throw when state has no images", function()
