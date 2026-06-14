@@ -155,6 +155,21 @@ function M.query_markdown_images(buf)
   return require("sixel-graphics.integrations.markdown").query_buffer_images(buf)
 end
 
+---Parse the current markdown buffer and return all mermaid diagram
+---fenced code blocks. Each match includes the renderer_id, source
+---code, and source range.
+---
+---Usage:
+---```lua
+---:lua vim.print(require("sixel-graphics").query_markdown_diagrams())
+---```
+---
+---@param buf? number  Buffer handle (default: current buffer)
+---@return DiagramMatch[]
+function M.query_markdown_diagrams(buf)
+  return require("sixel-graphics.integrations.markdown").query_buffer_diagrams(buf)
+end
+
 ---Resolve an image path found in a markdown file to an absolute filesystem path.
 ---
 ---Usage:
@@ -657,6 +672,30 @@ function M.create_popup_for_diagram(source, renderer_opts)
 
   logger.debug("create_popup_for_diagram: done")
   return true
+end
+
+---Render a mermaid diagram to PNG using the configured renderer.
+---Convenience wrapper around the renderer module. Useful for
+---keymaps and manual rendering.
+---
+---mmdr path: synchronous (~2-6ms), returns { file_path } immediately.
+---mmdc path: requires on_complete callback for async result.
+---
+---Usage:
+---```lua
+---:lua local r = require("sixel-graphics").render_mermaid("flowchart LR; A-->B")
+---:lua vim.print(r.file_path)
+---```
+---
+---@param source string     Diagram source code
+---@param opts? table        renderer_options.mermaid (default: from config)
+---@param on_complete? fun(path: string|nil, err: string|nil)  mmdc async callback
+---@return { file_path: string }?  Sync success (mmdr or mmdc cache hit)
+---@return { job_id: number }?     Async started (mmdc cache miss)
+---@return nil                     Error
+function M.render_mermaid(source, opts, on_complete)
+  opts = opts or require("sixel-graphics.config").options.renderer_options.mermaid
+  return require("sixel-graphics.renderers.mermaid").render(source, opts, on_complete)
 end
 
 ---@private
