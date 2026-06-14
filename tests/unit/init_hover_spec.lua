@@ -38,7 +38,8 @@ package.loaded["sixel-graphics.config"] = {
     sixel_pixel_scale = 1.0,
     popup_render_delay_ms = 16,
     hover = {
-      enabled = false, -- don't auto-register CursorMoved; we test functions directly
+      images = { enabled = true },
+      diagrams = { enabled = true },
       debounce_ms = 150,
       max_screen_fraction = 0.5,
       filetypes = { "markdown" },

@@ -76,7 +76,10 @@ describe("config", function()
       config.setup()
       local hover = config.options.hover
       assert.is_not_nil(hover)
-      assert.is_true(hover.enabled)
+      assert.is_not_nil(hover.images)
+      assert.is_true(hover.images.enabled)
+      assert.is_not_nil(hover.diagrams)
+      assert.is_true(hover.diagrams.enabled)
       assert.are.equal(150, hover.debounce_ms)
       assert.are.equal(0.5, hover.max_screen_fraction)
       assert.are.same({ "markdown" }, hover.filetypes)
@@ -97,7 +100,7 @@ describe("config", function()
       })
       assert.is_false(config.options.hover.diagrams.enabled)
       -- Other hover keys unaffected
-      assert.is_true(config.options.hover.enabled)
+      assert.is_true(config.options.hover.images.enabled)
       assert.are.equal(150, config.options.hover.debounce_ms)
     end)
 
@@ -108,7 +111,8 @@ describe("config", function()
         },
       })
       local hover = config.options.hover
-      assert.is_true(hover.enabled) -- from default
+      assert.is_true(hover.images.enabled) -- from default
+      assert.is_true(hover.diagrams.enabled) -- from default
       assert.are.equal(300, hover.debounce_ms) -- user override
       assert.are.equal(0.5, hover.max_screen_fraction) -- from default
       assert.are.same({ "markdown" }, hover.filetypes) -- from default
@@ -121,6 +125,39 @@ describe("config", function()
         },
       })
       assert.are.same({ "markdown", "asciidoc" }, config.options.hover.filetypes)
+    end)
+  end)
+
+  -- ── hover.images defaults (Step D5.1) ───────────────────────────
+
+  describe("hover.images defaults", function()
+    it("has hover.images.enabled = true by default", function()
+      config.setup()
+      local images = config.options.hover.images
+      assert.is_not_nil(images)
+      assert.is_true(images.enabled)
+    end)
+
+    it("accepts hover.images.enabled override", function()
+      config.setup({
+        hover = {
+          images = { enabled = false },
+        },
+      })
+      assert.is_false(config.options.hover.images.enabled)
+      assert.is_true(config.options.hover.diagrams.enabled) -- unaffected
+    end)
+
+    it("deep-extends hover.images without losing other hover keys", function()
+      config.setup({
+        hover = {
+          images = { enabled = false },
+          debounce_ms = 300,
+        },
+      })
+      assert.is_false(config.options.hover.images.enabled)
+      assert.is_true(config.options.hover.diagrams.enabled) -- from default
+      assert.are.equal(300, config.options.hover.debounce_ms)
     end)
   end)
 

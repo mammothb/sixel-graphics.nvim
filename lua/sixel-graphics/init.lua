@@ -63,7 +63,7 @@ function M.setup(opts)
 
   -- Hover autocommands: show images on cursor hover in markdown buffers
   local hover_opts = M.state.options.hover
-  if hover_opts and hover_opts.enabled ~= false then
+  if hover_opts then
     local group = vim.api.nvim_create_augroup("SixelGraphicsHover", { clear = true })
 
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
@@ -696,43 +696,46 @@ on_cursor_moved = function(buf)
 
   -- ── IMAGE CHECK ────────────────────────────────────────────────
 
-  local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
+  local img_opts = ((M.state.options or {}).hover or {}).images
+  if img_opts and img_opts.enabled ~= false then
+    local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
 
-  if match then
-    -- Resolve image path
-    local buf_path = vim.api.nvim_buf_get_name(buf)
-    if buf_path == "" then
-      return -- untitled buffer, can't resolve relative paths
-    end
+    if match then
+      -- Resolve image path
+      local buf_path = vim.api.nvim_buf_get_name(buf)
+      if buf_path == "" then
+        return -- untitled buffer, can't resolve relative paths
+      end
 
-    local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
+      local abs_path = require("sixel-graphics.utils.path").resolve_image_path(buf_path, match.url)
 
-    -- Check file exists
-    if vim.fn.filereadable(abs_path) == 0 then
-      return
-    end
+      -- Check file exists
+      if vim.fn.filereadable(abs_path) == 0 then
+        return
+      end
 
-    -- If the same image is already showing, don't recreate
-    if active_popup and active_popup.path == abs_path then
-      return
-    end
+      -- If the same image is already showing, don't recreate
+      if active_popup and active_popup.path == abs_path then
+        return
+      end
 
-    -- Debounce: wait for cursor to settle before showing popup.
-    -- Rapid cursor movement keeps cancelling the timer → no flicker.
-    local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
+      -- Debounce: wait for cursor to settle before showing popup.
+      -- Rapid cursor movement keeps cancelling the timer → no flicker.
+      local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
 
-    require("sixel-graphics.utils.logger").debug(function()
-      return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
-    end)
-
-    popup_timer = vim.fn.timer_start(debounce_ms, function()
-      popup_timer = nil
-      require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (image)")
-      vim.schedule(function()
-        create_popup_for_image(abs_path)
+      require("sixel-graphics.utils.logger").debug(function()
+        return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
       end)
-    end)
-    return
+
+      popup_timer = vim.fn.timer_start(debounce_ms, function()
+        popup_timer = nil
+        require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (image)")
+        vim.schedule(function()
+          create_popup_for_image(abs_path)
+        end)
+      end)
+      return
+    end
   end
 
   -- ── DIAGRAM CHECK ─────────────────────────────────────────────
