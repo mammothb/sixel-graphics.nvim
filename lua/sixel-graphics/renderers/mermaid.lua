@@ -57,6 +57,46 @@ local function _check_cache(hash)
 end
 M._check_cache = _check_cache
 
+---@private
+---Build the mmdr command array for vim.fn.system().
+---Returns an array of strings (not a single shell string) so
+---vim.fn.system() passes each arg directly without shell interpolation.
+---@param temp_path string    Path to temporary .mmd input file
+---@param cache_path string   Path to output .png file
+---@param mmdr_opts table     options.renderer_options.mermaid.mmdr
+---@return string[]  Command array: {"mmdr", "-i", ..., "-e", "png"}
+local function _build_mmdr_command(temp_path, cache_path, mmdr_opts)
+  mmdr_opts = mmdr_opts or {}
+  local args = {
+    "mmdr",
+    "-i",
+    temp_path,
+    "-o",
+    cache_path,
+    "-e",
+    "png",
+  }
+
+  if mmdr_opts.width then
+    table.insert(args, "-w")
+    table.insert(args, tostring(mmdr_opts.width))
+  end
+  if mmdr_opts.height then
+    table.insert(args, "-H")
+    table.insert(args, tostring(mmdr_opts.height))
+  end
+  if mmdr_opts.config_file then
+    table.insert(args, "-c")
+    table.insert(args, mmdr_opts.config_file)
+  end
+  if mmdr_opts.fast_text then
+    table.insert(args, "--fastText")
+  end
+
+  return args
+end
+M._build_mmdr_command = _build_mmdr_command
+
 ---Render a mermaid diagram source to PNG.
 ---
 ---mmdr path (sync, implemented): hash → cache check → vim.fn.system() → file_path

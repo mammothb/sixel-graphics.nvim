@@ -160,4 +160,77 @@ describe("mermaid renderer — utilities", function()
       assert.is_nil(result)
     end)
   end)
+
+  -- ── _build_mmdr_command ─────────────────────────────────────────
+
+  describe("_build_mmdr_command", function()
+    it("builds minimal command with required flags only", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", {})
+      local joined = table.concat(args, " ")
+      -- Required flags present
+      assert.is_not_nil(string.find(joined, "^mmdr "))
+      assert.is_not_nil(string.find(joined, "%-i /tmp/in%.mmd"))
+      assert.is_not_nil(string.find(joined, "%-o /cache/out%.png"))
+      assert.is_not_nil(string.find(joined, "%-e png"))
+      -- No optional flags
+      assert.is_nil(string.find(joined, "%-w "))
+      assert.is_nil(string.find(joined, "%-H "))
+      assert.is_nil(string.find(joined, "%-c "))
+      assert.is_nil(string.find(joined, "%-%-fastText"))
+    end)
+
+    it("includes -w when width is set", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { width = 800 })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-w 800"))
+    end)
+
+    it("includes -H when height is set", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { height = 600 })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-H 600"))
+    end)
+
+    it("includes -c when config_file is set", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", {
+        config_file = "/home/user/mmdr-config.json",
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-c /home/user/mmdr%-config%.json"))
+    end)
+
+    it("includes --fastText when fast_text is true", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { fast_text = true })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-%-fastText"))
+    end)
+
+    it("omits --fastText when fast_text is false", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { fast_text = false })
+      local joined = table.concat(args, " ")
+      assert.is_nil(string.find(joined, "%-%-fastText"))
+    end)
+
+    it("combines all optional flags", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", {
+        width = 1200,
+        height = 900,
+        config_file = "/tmp/theme.json",
+        fast_text = true,
+      })
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "%-w 1200"))
+      assert.is_not_nil(string.find(joined, "%-H 900"))
+      assert.is_not_nil(string.find(joined, "%-c /tmp/theme%.json"))
+      assert.is_not_nil(string.find(joined, "%-%-fastText"))
+    end)
+
+    it("handles nil options gracefully", function()
+      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", nil)
+      local joined = table.concat(args, " ")
+      assert.is_not_nil(string.find(joined, "^mmdr "))
+      assert.is_nil(string.find(joined, "%-w "))
+      assert.is_nil(string.find(joined, "%-H "))
+    end)
+  end)
 end)
