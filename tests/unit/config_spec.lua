@@ -520,7 +520,9 @@ describe("config", function()
 
     it("detects multiple typos", function()
       local keys = config._find_unknown_keys({ max_widht = 80, scale = 0.5, hover = { bad_key = 1 } })
-      assert.are.same({ "max_widht", "hover.bad_key" }, keys)
+      assert.are.equal(2, #keys)
+      assert.is_true(vim.tbl_contains(keys, "max_widht"))
+      assert.is_true(vim.tbl_contains(keys, "hover.bad_key"))
     end)
 
     it("skips list-like tables (filetypes)", function()
