@@ -94,7 +94,6 @@ describe("create_popup_for_diagram (mmdr sync)", function()
     package.loaded["sixel-graphics.renderers.mermaid"] = mermaid_mock
 
     -- Set up state so guard_setup passes
-    M.has_setup = true
     M.state = {
       enabled = true,
       images = {},
@@ -278,15 +277,15 @@ describe("create_popup_for_diagram (mmdr sync)", function()
   -- ── guard_setup ─────────────────────────────────────────────────
 
   describe("guard_setup", function()
-    it("throws error when has_setup is false", function()
-      M.has_setup = false
+    it("throws error when state is nil", function()
+      M.state = nil
       assert.has.errors(function()
         M.create_popup_for_diagram("source", { renderer = "mmdr" })
       end)
-      M.has_setup = true -- restore for other tests
+      M.state = { enabled = true, images = {}, options = {} } -- restore for other tests
     end)
 
-    it("does not throw when has_setup is true", function()
+    it("does not throw when state exists", function()
       assert.has_no.errors(function()
         M.create_popup_for_diagram("flowchart LR; A-->B", { renderer = "mmdr" })
       end)

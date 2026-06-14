@@ -1,16 +1,23 @@
 ---@class SixelGraphics
----@field has_setup boolean
 ---@field state table|nil
-local M = { has_setup = false, state = nil }
+local M = { state = nil }
 
 ---@private
 local function guard_setup()
-  if not M.has_setup then
-    error("sixel-graphics.nvim is not set up. Call require('sixel-graphics').setup() first.")
+  if not M.state then
+    error("sixel-graphics.nvim is not initialized. Call require('sixel-graphics')._init() or setup() first.")
   end
 end
 
----Setup sixel-graphics.nvim with optional configuration.
+-- Forward declarations: used in setup() before their definitions below
+local on_cursor_moved
+local close_active_popup
+local active_popup
+
+---Override default configuration.
+---Pure config merge — no side effects beyond updating the options table.
+---Safe to call before or after initialization. If called before _init(),
+---the merged config will be used when initialization runs.
 ---
 ---```lua
 ---require("sixel-graphics").setup({
@@ -20,14 +27,28 @@ end
 ---```
 ---
 ---@param opts Config?
-
--- Forward declarations: used in setup() before their definitions below
-local on_cursor_moved
-local close_active_popup
-local active_popup
-
 function M.setup(opts)
   require("sixel-graphics.config").setup(opts)
+
+  -- If already initialized, update state.options in-place so live
+  -- references (autocommand callbacks, etc.) pick up new config.
+  if M.state then
+    M.state.options = require("sixel-graphics.config").options
+  end
+
+  -- Auto-initialize on first setup() call (plugin/ entry point also
+  -- calls _init() directly; idempotent guard prevents double-init).
+  M._init()
+end
+
+---@private
+---Initialize plugin state, backend, and autocommands.
+---Idempotent: safe to call multiple times (second call is a no-op).
+---Called automatically by setup() and by plugin/sixel-graphics.lua.
+function M._init()
+  if M._initialized then
+    return
+  end
 
   local logger = require("sixel-graphics.utils.logger")
 
@@ -38,7 +59,7 @@ function M.setup(opts)
     if safe.debug and safe.debug.file_path then
       safe.debug.file_path = "<set>"
     end
-    return string.format("setup() called with opts: %s", vim.inspect(safe))
+    return string.format("_init() with config: %s", vim.inspect(safe))
   end)
 
   -- Initialize shared state
@@ -111,7 +132,7 @@ function M.setup(opts)
     })
   end
 
-  M.has_setup = true
+  M._initialized = true
 end
 
 ---Check whether the current terminal supports sixel.
@@ -247,7 +268,7 @@ end
 ---Check whether image rendering is currently enabled.
 ---@return boolean
 function M.is_enabled()
-  return not not (M.has_setup and M.state and M.state.enabled == true)
+  return not not (M.state and M.state.enabled == true)
 end
 
 ---Enable image rendering (show images).
