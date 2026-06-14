@@ -233,6 +233,31 @@ function M.setup(opts)
   end
 end
 
+---Return keys present in user config but absent from defaults.
+---Walks nested tables; e.g. { max_widht = 80 } returns {"max_widht"}.
+---Useful for health-check typo detection.
+---@param user_opts table|nil  Raw opts table passed to setup()
+---@return string[]  Dot-separated unknown key paths (empty if none or nil)
+function M._find_unknown_keys(user_opts)
+  if not user_opts then
+    return {}
+  end
+
+  local unknown = {}
+  local function walk(u, d, path)
+    for k, v in pairs(u) do
+      local full = path == "" and k or path .. "." .. k
+      if d[k] == nil then
+        table.insert(unknown, full)
+      elseif type(v) == "table" and type(d[k]) == "table" and not vim.tbl_islist(v) then
+        walk(v, d[k], full)
+      end
+    end
+  end
+  walk(user_opts, M.defaults, "")
+  return unknown
+end
+
 return setmetatable(M, {
   __index = function(_, key)
     if rawget(M, "options") == nil then

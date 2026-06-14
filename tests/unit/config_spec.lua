@@ -489,4 +489,48 @@ describe("config", function()
       assert.are.equal(0, #notifications)
     end)
   end)
+
+  -- ── unknown key detection ──────────────────────────────────────
+
+  describe("_find_unknown_keys", function()
+    it("returns empty for nil opts", function()
+      local keys = config._find_unknown_keys(nil)
+      assert.are.same({}, keys)
+    end)
+
+    it("returns empty for empty opts", function()
+      local keys = config._find_unknown_keys({})
+      assert.are.same({}, keys)
+    end)
+
+    it("returns empty for known key", function()
+      local keys = config._find_unknown_keys({ scale = 0.5 })
+      assert.are.same({}, keys)
+    end)
+
+    it("detects top-level typo", function()
+      local keys = config._find_unknown_keys({ max_widht = 80 })
+      assert.are.same({ "max_widht" }, keys)
+    end)
+
+    it("detects nested typo", function()
+      local keys = config._find_unknown_keys({ hover = { debounce_ms = 100, typpo = true } })
+      assert.are.same({ "hover.typpo" }, keys)
+    end)
+
+    it("detects multiple typos", function()
+      local keys = config._find_unknown_keys({ max_widht = 80, scale = 0.5, hover = { bad_key = 1 } })
+      assert.are.same({ "max_widht", "hover.bad_key" }, keys)
+    end)
+
+    it("skips list-like tables (filetypes)", function()
+      local keys = config._find_unknown_keys({ hover = { filetypes = { "markdown", "asciidoc" } } })
+      assert.are.same({}, keys)
+    end)
+
+    it("handles unknown nested table", function()
+      local keys = config._find_unknown_keys({ unknown_table = { x = 1 } })
+      assert.are.same({ "unknown_table" }, keys)
+    end)
+  end)
 end)
