@@ -434,6 +434,7 @@ end
 
 -- Active popup state (single-popup: only one hover popup at a time)
 active_popup = nil -- { win: number, buf: number, image_id: string, path: string, source?: string }
+local active_diagram_job_id = nil -- mmdc job ID, nil if no async render in flight
 local popup_timer = nil -- vim.fn.timer_start handle for debounce
 local popup_in_progress = false -- guard against re-entrant create/destroy
 local prev_cursor_row = -1
@@ -441,6 +442,11 @@ local prev_cursor_row = -1
 ---@private
 ---Close the active hover popup (if any) and clear its sixel image.
 close_active_popup = function()
+  -- Cancel any pending mmdc job (result will be cached, silently ignored).
+  -- Must happen before the active_popup nil guard so stale jobs are
+  -- cleaned up even when cursor moves during mmdc loading (no popup yet).
+  active_diagram_job_id = nil
+
   if not active_popup then
     return
   end
@@ -508,11 +514,16 @@ end
 ---Uses the configured renderer (mmdr or mmdc) to produce a PNG,
 ---then delegates to show_image_popup() for display.
 ---
----D4.1: mmdr sync path only. mmdc async path added in D4.3.
+---mmdr path: synchronous vim.fn.system() (~2-6ms). Returns
+---  immediately with the popup visible.
+---
+---mmdc path: asynchronous vim.fn.jobstart() (~1-5s). Returns
+---  immediately after spawning the job; the popup appears later
+---  via an on_complete callback when mmdc finishes.
 ---
 ---@param source string        Diagram source code
 ---@param renderer_opts table  renderer_options.mermaid from config
----@return boolean  True if popup was created
+---@return boolean  True if popup was created (or async job started)
 function M.create_popup_for_diagram(source, renderer_opts)
   guard_setup()
 
@@ -526,7 +537,96 @@ function M.create_popup_for_diagram(source, renderer_opts)
     return false
   end
 
+  -- Close any existing popup first (enforce single-popup)
+  -- Do this before rendering so stale popup doesn't linger during mmdc delay
+  close_active_popup()
+
+  local renderer_name = renderer_opts and renderer_opts.renderer or "mmdr"
   local mermaid = require("sixel-graphics.renderers.mermaid")
+
+  -- ── mmdc path ────────────────────────────────────────────────
+
+  if renderer_name == "mmdc" then
+    active_diagram_job_id = nil -- clear any stale job
+
+    -- mmdc has two return shapes:
+    --   cache hit:  { file_path }          ← sync, no callback consumed
+    --   cache miss: { job_id }              ← async, callback was consumed
+    local result = mermaid.render(source, renderer_opts, function(path, err)
+      vim.schedule(function()
+        if active_diagram_job_id == nil then
+          -- Popup was closed while loading (cursor moved away).
+          -- Job result is cached on disk; next hover will be instant.
+          logger.debug("create_popup_for_diagram: mmdc complete but stale (popup closed)")
+          return
+        end
+        active_diagram_job_id = nil
+
+        if err then
+          vim.notify("sixel-graphics: diagram render failed: " .. err, vim.log.levels.ERROR)
+          return
+        end
+
+        -- Close any popup that appeared in the meantime
+        close_active_popup()
+
+        local win, image_id = M.show_image_popup(path)
+        if win then
+          active_popup = {
+            win = win,
+            buf = vim.api.nvim_win_get_buf(win),
+            image_id = image_id,
+            path = path,
+            source = source,
+          }
+          logger.debug("create_popup_for_diagram: mmdc async complete")
+        end
+      end)
+    end)
+
+    if not result then
+      -- Renderer not installed or spawn failed (already notified by mermaid module)
+      logger.debug("create_popup_for_diagram: mmdc render failed to start")
+      return false
+    end
+
+    -- Cache hit: synchronous return with file_path
+    if result.file_path then
+      logger.debug("create_popup_for_diagram: mmdc cache hit")
+
+      local win, image_id = M.show_image_popup(result.file_path)
+      if not win then
+        logger.debug("create_popup_for_diagram: show_image_popup returned nil")
+        return false
+      end
+
+      active_popup = {
+        win = win,
+        buf = vim.api.nvim_win_get_buf(win),
+        image_id = image_id,
+        path = result.file_path,
+        source = source,
+      }
+
+      logger.debug("create_popup_for_diagram: mmdc cache hit done")
+      return true
+    end
+
+    -- Cache miss: async job started
+    if result.job_id then
+      vim.notify("sixel-graphics: rendering diagram...", vim.log.levels.INFO)
+      active_diagram_job_id = result.job_id
+      logger.debug("create_popup_for_diagram: mmdc async started (job_id=" .. result.job_id .. ")")
+      return true
+    end
+
+    -- Malformed result (shouldn't happen)
+    logger.debug("create_popup_for_diagram: mmdc result has neither file_path nor job_id")
+    return false
+  end
+
+  -- ── mmdr sync path ────────────────────────────────────────────
+
   local result = mermaid.render(source, renderer_opts)
 
   if not result then
@@ -535,21 +635,10 @@ function M.create_popup_for_diagram(source, renderer_opts)
     return false
   end
 
-  if result.job_id then
-    -- mmdc async path — not implemented in D4.1
-    -- (D4.3 will handle this with an on_complete callback)
-    logger.debug("create_popup_for_diagram: mmdc async (job_id=" .. result.job_id .. ") not yet supported in D4.1")
-    vim.notify("sixel-graphics: mmdc async hover not yet implemented (D4.3)", vim.log.levels.WARN)
-    return false
-  end
-
   if not result.file_path then
     logger.debug("create_popup_for_diagram: result has no file_path")
     return false
   end
-
-  -- Close any existing popup first (enforce single-popup)
-  close_active_popup()
 
   -- Show the rendered PNG in a floating window
   local win, image_id = M.show_image_popup(result.file_path)

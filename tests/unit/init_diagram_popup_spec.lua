@@ -304,36 +304,194 @@ describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
     end)
   end)
 
-  -- ── mmdc path (not yet implemented) ─────────────────────────────
+  -- ── mmdc async path (D4.3) ────────────────────────────────────
 
-  describe("mmdc path (D4.3 placeholder)", function()
-    it("returns false and notifies when mmdc returns job_id", function()
-      mermaid_mock.render = function()
+  describe("mmdc async path", function()
+    local _timer_start
+
+    before_each(function()
+      _timer_start = vim.fn.timer_start
+      vim.fn.timer_start = function(_, _)
+        return 999
+      end -- no-op timer for timeout guard
+    end)
+
+    after_each(function()
+      vim.fn.timer_start = _timer_start
+      -- Clear any pending async state between tests
+      M.close_popup()
+      vim.wait(100, function() end)
+    end)
+
+    it("passes on_complete callback to mermaid.render (3rd arg)", function()
+      local render_spy = require("luassert.spy").new(function(_source, _opts, cb)
+        -- Store callback for manual firing
+        mermaid_mock._last_callback = cb
+        return { job_id = 42 }
+      end)
+      mermaid_mock.render = render_spy
+
+      local opts = { renderer = "mmdc", mmdc = { theme = "dark" } }
+      M.create_popup_for_diagram("source", opts)
+
+      assert.spy(render_spy).was_called(1)
+      -- 3rd argument should be a function (the callback)
+      local third_arg = render_spy.calls[1].vals[3]
+      assert.is_function(third_arg)
+    end)
+
+    it("shows loading notification when mmdc job starts", function()
+      local notify_calls = {}
+      vim.notify = function(msg, level)
+        table.insert(notify_calls, { msg = msg, level = level })
+      end
+
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
         return { job_id = 42 }
       end
+
+      M.create_popup_for_diagram("source", { renderer = "mmdc" })
+
+      assert.are.equal(1, #notify_calls)
+      assert.is_not_nil(string.find(notify_calls[1].msg, "rendering"))
+      assert.are.equal(vim.log.levels.INFO, notify_calls[1].level)
+    end)
+
+    it("returns true when async job starts", function()
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
+        return { job_id = 42 }
+      end
+
+      local result = M.create_popup_for_diagram("source", { renderer = "mmdc" })
+      assert.is_true(result)
+    end)
+
+    it("does not call show_image_popup immediately (async)", function()
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
+        return { job_id = 42 }
+      end
+
+      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
+      M.create_popup_for_diagram("source", { renderer = "mmdc" })
+      -- show_image_popup should NOT be called synchronously
+      assert.spy(popup_spy).was_called(0)
+      popup_spy:revert()
+    end)
+
+    it("calls show_image_popup when on_complete fires with path", function()
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
+        return { job_id = 42 }
+      end
+
+      M.create_popup_for_diagram("source", { renderer = "mmdc" })
+
+      -- Simulate mmdc completion
+      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
+      mermaid_mock._last_callback("/cache/mermaid/abc123.png") -- no error
+
+      -- on_complete uses vim.schedule, so pump the event loop
+      vim.wait(50, function() end)
+
+      assert.spy(popup_spy).was_called(1)
+      assert.spy(popup_spy).was_called_with("/cache/mermaid/abc123.png")
+      popup_spy:revert()
+    end)
+
+    it("shows error notification when on_complete fires with error", function()
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
+        return { job_id = 42 }
+      end
+
+      M.create_popup_for_diagram("source", { renderer = "mmdc" })
 
       local notify_calls = {}
       vim.notify = function(msg, level)
         table.insert(notify_calls, { msg = msg, level = level })
       end
 
-      local result = M.create_popup_for_diagram("source", { renderer = "mmdc" })
+      mermaid_mock._last_callback(nil, "syntax error in diagram")
+      vim.wait(50, function() end)
 
-      assert.is_false(result)
       assert.are.equal(1, #notify_calls)
-      -- Notification should mention mmdc not yet implemented
-      assert.is_not_nil(string.find(notify_calls[1].msg, "mmdc"))
-      assert.is_not_nil(string.find(notify_calls[1].msg, "D4%.3"))
+      assert.is_not_nil(string.find(notify_calls[1].msg, "render failed"))
+      assert.is_not_nil(string.find(notify_calls[1].msg, "syntax error"))
+      assert.are.equal(vim.log.levels.ERROR, notify_calls[1].level)
     end)
 
-    it("does not call show_image_popup for mmdc path", function()
-      mermaid_mock.render = function()
+    it("silently ignores completion when popup was closed (stale)", function()
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
         return { job_id = 42 }
       end
 
-      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
       M.create_popup_for_diagram("source", { renderer = "mmdc" })
-      assert.spy(popup_spy).was_called(0)
+
+      -- Close popup (simulates cursor moving away during load)
+      M.close_popup()
+      vim.wait(100, function() end) -- let popup_in_progress reset
+
+      -- Now fire completion — should be silently ignored
+      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
+      local notify_calls = {}
+      vim.notify = function(msg, level)
+        table.insert(notify_calls, { msg = msg, level = level })
+      end
+
+      mermaid_mock._last_callback("/cache/mermaid/stale.png")
+      vim.wait(50, function() end)
+
+      assert.spy(popup_spy).was_called(0) -- no popup for stale completion
+      assert.are.equal(0, #notify_calls) -- no error either, just silence
+      popup_spy:revert()
+    end)
+
+    it("returns false when mermaid.render returns nil (not installed)", function()
+      mermaid_mock.render = function(_, _, _)
+        return nil
+      end
+
+      local result = M.create_popup_for_diagram("source", { renderer = "mmdc" })
+      assert.is_false(result)
+    end)
+
+    it("renders multiple mmdc diagrams sequentially", function()
+      -- First render
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
+        return { job_id = 42 }
+      end
+
+      local r1 = M.create_popup_for_diagram("first", { renderer = "mmdc" })
+      assert.is_true(r1)
+
+      -- Complete first job
+      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
+      mermaid_mock._last_callback("/cache/first.png")
+      vim.wait(50, function() end)
+      assert.spy(popup_spy).was_called(1)
+
+      -- Second render (simulates moving to different diagram)
+      M.close_popup()
+      vim.wait(100, function() end)
+
+      mermaid_mock.render = function(_, _, cb)
+        mermaid_mock._last_callback = cb
+        return { job_id = 43 }
+      end
+
+      popup_spy:clear()
+      local r2 = M.create_popup_for_diagram("second", { renderer = "mmdc" })
+      assert.is_true(r2)
+
+      mermaid_mock._last_callback("/cache/second.png")
+      vim.wait(50, function() end)
+      assert.spy(popup_spy).was_called(1)
+      assert.spy(popup_spy).was_called_with("/cache/second.png")
       popup_spy:revert()
     end)
   end)
