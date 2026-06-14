@@ -33,6 +33,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - *checkout
+      - name: "Setup - Node"
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: "Setup - Chrome"
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@2e1d749697dd1612b833dba4a722266286fbefcd # v2.1.2
+        with:
+          chrome-version: "148.0.7778.96"
       - name: "Setup - Neovim"
         env:
           NEOVIM_VERSION: "0.11.7"
@@ -53,5 +62,18 @@ jobs:
       - name: "Setup - vusted"
         run: |
           luarocks --local --lua-version=5.1 install vusted
+      - name: "Setup - mmdr"
+        env:
+          MMDR_VERSION: "0.2.2"
+        run: |
+          curl -fsSL "https://github.com/1jehuang/mermaid-rs-renderer/releases/download/v${MMDR_VERSION}/mmdr-x86_64-unknown-linux-gui.tar.gz" -o mmdr.tar.gz
+          tar -xzvf mmdr.tar.gz
+          sudo mv mmdr /usr/local/bin/mmdr
+      - name: "Setup - mmdc"
+        env:
+          MMDC_VERSION: "11.15.0"
+        run: npm install -g "@mermaid-js/mermaid-cli@${MMDC_VERSION}"
       - name: "Run tests"
+        env:
+          PUPPETEER_EXECUTABLE_PATH: "${{ steps.setup-chrome.outputs.chrome-path }}"
         run: make test
