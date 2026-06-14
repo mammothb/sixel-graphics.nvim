@@ -82,6 +82,9 @@ require("sixel-graphics").setup({
     mermaid = {
       renderer = "mmdr",  -- "mmdr" (native Rust, ~2-6ms) | "mmdc" (Node.js/Chromium, ~1-5s)
 
+      -- Minimum popup width in cells (diagrams auto-size to content, enforce floor)
+      min_popup_width = 40,
+
       mmdr = {
         width = nil,        -- nil | number (px)
         height = nil,       -- nil | number (px)
