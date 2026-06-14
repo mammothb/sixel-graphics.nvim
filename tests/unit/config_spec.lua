@@ -133,6 +133,68 @@ describe("config", function()
 
   -- ── sixel + popup config (Step 6) ─────────────────────────────────
 
+  -- ── renderer_options.mermaid defaults (Step D2.1) ────────────────
+
+  describe("renderer_options.mermaid defaults", function()
+    it("has renderer_options with mermaid key", function()
+      config.setup()
+      local ro = config.options.renderer_options
+      assert.is_not_nil(ro)
+      assert.is_not_nil(ro.mermaid)
+    end)
+
+    it("default renderer is mmdr", function()
+      config.setup()
+      assert.are.equal("mmdr", config.options.renderer_options.mermaid.renderer)
+    end)
+
+    it("mmdr defaults are correct", function()
+      config.setup()
+      local mmdr = config.options.renderer_options.mermaid.mmdr
+      assert.is_not_nil(mmdr)
+      assert.is_nil(mmdr.width)
+      assert.is_nil(mmdr.height)
+      assert.is_false(mmdr.fast_text)
+      assert.is_nil(mmdr.config_file)
+    end)
+
+    it("mmdc defaults are correct", function()
+      config.setup()
+      local mmdc = config.options.renderer_options.mermaid.mmdc
+      assert.is_not_nil(mmdc)
+      assert.is_nil(mmdc.theme)
+      assert.is_nil(mmdc.background)
+      assert.is_nil(mmdc.scale)
+      assert.is_nil(mmdc.width)
+      assert.is_nil(mmdc.height)
+      assert.is_nil(mmdc.cli_args)
+    end)
+
+    it("deep-extends renderer_options correctly", function()
+      config.setup({
+        renderer_options = {
+          mermaid = {
+            renderer = "mmdc",
+            mmdr = { width = 800 },
+            mmdc = { theme = "dark" },
+          },
+        },
+      })
+      local m = config.options.renderer_options.mermaid
+      assert.are.equal("mmdc", m.renderer)
+      assert.are.equal(800, m.mmdr.width)
+      assert.is_nil(m.mmdr.height) -- from default
+      assert.is_false(m.mmdr.fast_text) -- from default
+      assert.is_nil(m.mmdr.config_file) -- from default
+      assert.are.equal("dark", m.mmdc.theme)
+      assert.is_nil(m.mmdc.background) -- from default
+      assert.is_nil(m.mmdc.scale) -- from default
+      assert.is_nil(m.mmdc.width) -- from default
+      assert.is_nil(m.mmdc.height) -- from default
+      assert.is_nil(m.mmdc.cli_args) -- from default
+    end)
+  end)
+
   describe("sixel config", function()
     it("sixel_pixel_scale defaults to 1.0", function()
       config.setup()

@@ -34,6 +34,25 @@ M.defaults = {
     max_screen_fraction = 0.5, -- max fraction of screen the popup may occupy
     filetypes = { "markdown" }, -- filetypes to enable hover in
   },
+  renderer_options = {
+    mermaid = {
+      renderer = "mmdr", -- "mmdr" (native Rust, 2-6ms) | "mmdc" (Node.js/Chromium, 1-5s)
+      mmdr = {
+        width = nil, -- nil | number (px, mmdr -w flag, default 1200)
+        height = nil, -- nil | number (px, mmdr -H flag, default 800)
+        fast_text = false, -- use calibrated fallback widths (mmdr --fastText)
+        config_file = nil, -- nil | path to mmdr config.json (-c flag; bundled default has font settings)
+      },
+      mmdc = {
+        theme = nil, -- nil | "default" | "dark" | "forest" | "neutral"
+        background = nil, -- nil | "transparent" | "white" | "#hex"
+        scale = nil, -- nil | number (1-3)
+        width = nil, -- nil | number (px)
+        height = nil, -- nil | number (px)
+        cli_args = nil, -- nil | string[] (extra mmdc CLI args, e.g. {"--no-sandbox"})
+      },
+    },
+  },
 }
 
 ---@param opts Config?
