@@ -714,6 +714,24 @@ function M.render_mermaid(source, opts, on_complete)
 end
 
 ---@private
+---Start a debounced popup timer. Cancels any pending timer first
+---(caller already did this — defensive). On fire, clears popup_timer
+---and runs callback inside vim.schedule for safe Neovim API access.
+---@param delay_ms number
+---@param label string      Log label ("image" or "diagram")
+---@param callback function  Called inside vim.schedule when timer fires
+local function schedule_popup(delay_ms, label, callback)
+  require("sixel-graphics.utils.logger").debug(function()
+    return "on_cursor_moved: " .. label .. " debounce " .. delay_ms .. "ms"
+  end)
+  popup_timer = vim.fn.timer_start(delay_ms, function()
+    popup_timer = nil
+    require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (" .. label .. ")")
+    vim.schedule(callback)
+  end)
+end
+
+---@private
 ---CursorMoved handler: detect if cursor is on an image reference or
 ---inside a mermaid diagram block, and create/close popup accordingly.
 ---Debounced to prevent flicker on rapid cursor movement.
@@ -774,18 +792,8 @@ on_cursor_moved = function(buf)
 
       -- Debounce: wait for cursor to settle before showing popup.
       -- Rapid cursor movement keeps cancelling the timer → no flicker.
-      local debounce_ms = hover.debounce_ms
-
-      require("sixel-graphics.utils.logger").debug(function()
-        return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
-      end)
-
-      popup_timer = vim.fn.timer_start(debounce_ms, function()
-        popup_timer = nil
-        require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (image)")
-        vim.schedule(function()
-          create_popup_for_image(abs_path)
-        end)
+      schedule_popup(hover.debounce_ms, "image", function()
+        create_popup_for_image(abs_path)
       end)
       return
     end
@@ -804,23 +812,8 @@ on_cursor_moved = function(buf)
       end
 
       local renderer_opts = M.state.options.renderer_options.mermaid
-      local debounce_ms = hover.debounce_ms
-
-      require("sixel-graphics.utils.logger").debug(function()
-        return "on_cursor_moved: diagram debounce "
-          .. debounce_ms
-          .. "ms"
-          .. " ["
-          .. diagram.source:gsub("\n", "\\n"):sub(1, 60)
-          .. "]"
-      end)
-
-      popup_timer = vim.fn.timer_start(debounce_ms, function()
-        popup_timer = nil
-        require("sixel-graphics.utils.logger").debug("on_cursor_moved: timer fired (diagram)")
-        vim.schedule(function()
-          M.create_popup_for_diagram(diagram.source, renderer_opts)
-        end)
+      schedule_popup(hover.debounce_ms, "diagram", function()
+        M.create_popup_for_diagram(diagram.source, renderer_opts)
       end)
       return
     end
