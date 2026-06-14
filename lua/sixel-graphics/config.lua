@@ -77,6 +77,9 @@ function M.setup(opts)
     if value == nil then
       return
     end
+    if type(value) ~= "number" then
+      return
+    end
     if math.floor(value) ~= value then
       vim.notify(prefix .. "." .. path .. ": expected integer, got " .. tostring(value), vim.log.levels.ERROR)
     elseif value <= 0 then
@@ -111,6 +114,123 @@ function M.setup(opts)
   check_positive_integer("cell_width_override", o.cell_width_override)
   check_positive_integer("cell_height_override", o.cell_height_override)
   check_positive_integer("popup_render_delay_ms", o.popup_render_delay_ms)
+
+  -- ── Nested validation ────────────────────────────────────────
+
+  -- debug
+  local dbg = o.debug
+  if type(dbg) == "table" then
+    local dok, derr = pcall(vim.validate, {
+      enabled = { dbg.enabled, "boolean" },
+      level = { dbg.level, "string" },
+      file_path = { dbg.file_path, "string", true },
+    })
+    if not dok then
+      vim.notify(prefix .. ".debug." .. derr, vim.log.levels.ERROR)
+    end
+    if dbg.level and not vim.tbl_contains({ "debug", "info", "warn", "error" }, dbg.level) then
+      vim.notify(
+        prefix .. ".debug.level: expected one of debug|info|warn|error, got " .. tostring(dbg.level),
+        vim.log.levels.ERROR
+      )
+    end
+  end
+
+  -- hover
+  local hov = o.hover
+  if type(hov) == "table" then
+    local hok, herr = pcall(vim.validate, {
+      debounce_ms = { hov.debounce_ms, "number" },
+      max_screen_fraction = { hov.max_screen_fraction, "number" },
+      filetypes = { hov.filetypes, "table" },
+      images = { hov.images, "table" },
+      diagrams = { hov.diagrams, "table" },
+    })
+    if not hok then
+      vim.notify(prefix .. ".hover." .. herr, vim.log.levels.ERROR)
+    end
+    check_positive_integer("hover.debounce_ms", hov.debounce_ms)
+    check_positive("hover.max_screen_fraction", hov.max_screen_fraction)
+    if hov.max_screen_fraction ~= nil and type(hov.max_screen_fraction) == "number" and hov.max_screen_fraction > 1 then
+      vim.notify(
+        prefix .. ".hover.max_screen_fraction: expected <= 1, got " .. tostring(hov.max_screen_fraction),
+        vim.log.levels.WARN
+      )
+    end
+    for _, sub in ipairs({ "images", "diagrams" }) do
+      local s = hov[sub]
+      if type(s) == "table" then
+        local sok, serr = pcall(vim.validate, {
+          enabled = { s.enabled, "boolean" },
+        })
+        if not sok then
+          vim.notify(prefix .. ".hover." .. sub .. "." .. serr, vim.log.levels.ERROR)
+        end
+      end
+    end
+  end
+
+  -- renderer_options.mermaid
+  local ro = o.renderer_options
+  if type(ro) == "table" and type(ro.mermaid) == "table" then
+    local m = ro.mermaid
+    local mok, merr = pcall(vim.validate, {
+      renderer = { m.renderer, "string" },
+      min_popup_width = { m.min_popup_width, "number" },
+      mmdr = { m.mmdr, "table" },
+      mmdc = { m.mmdc, "table" },
+    })
+    if not mok then
+      vim.notify(prefix .. ".renderer_options.mermaid." .. merr, vim.log.levels.ERROR)
+    end
+    if m.renderer and not vim.tbl_contains({ "mmdr", "mmdc" }, m.renderer) then
+      vim.notify(
+        prefix .. ".renderer_options.mermaid.renderer: expected mmdr|mmdc, got " .. tostring(m.renderer),
+        vim.log.levels.ERROR
+      )
+    end
+    check_positive_integer("renderer_options.mermaid.min_popup_width", m.min_popup_width)
+
+    -- mmdr subtable
+    if type(m.mmdr) == "table" then
+      local drok, drerr = pcall(vim.validate, {
+        width = { m.mmdr.width, "number", true },
+        height = { m.mmdr.height, "number", true },
+        fast_text = { m.mmdr.fast_text, "boolean" },
+        config_file = { m.mmdr.config_file, "string", true },
+      })
+      if not drok then
+        vim.notify(prefix .. ".renderer_options.mermaid.mmdr." .. drerr, vim.log.levels.ERROR)
+      end
+      check_positive_integer("renderer_options.mermaid.mmdr.width", m.mmdr.width)
+      check_positive_integer("renderer_options.mermaid.mmdr.height", m.mmdr.height)
+    end
+
+    -- mmdc subtable
+    if type(m.mmdc) == "table" then
+      local dcok, dcerr = pcall(vim.validate, {
+        theme = { m.mmdc.theme, "string", true },
+        background = { m.mmdc.background, "string", true },
+        scale = { m.mmdc.scale, "number", true },
+        width = { m.mmdc.width, "number", true },
+        height = { m.mmdc.height, "number", true },
+        cli_args = { m.mmdc.cli_args, "table", true },
+      })
+      if not dcok then
+        vim.notify(prefix .. ".renderer_options.mermaid.mmdc." .. dcerr, vim.log.levels.ERROR)
+      end
+      if m.mmdc.scale ~= nil and type(m.mmdc.scale) == "number" then
+        if m.mmdc.scale < 1 or m.mmdc.scale > 3 then
+          vim.notify(
+            prefix .. ".renderer_options.mermaid.mmdc.scale: expected 1-3, got " .. tostring(m.mmdc.scale),
+            vim.log.levels.ERROR
+          )
+        end
+      end
+      check_positive_integer("renderer_options.mermaid.mmdc.width", m.mmdc.width)
+      check_positive_integer("renderer_options.mermaid.mmdc.height", m.mmdc.height)
+    end
+  end
 end
 
 return setmetatable(M, {

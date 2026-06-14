@@ -384,4 +384,109 @@ describe("config", function()
       assert.are.equal(-1, config.options.scale) -- value is set, just warned
     end)
   end)
+
+  -- ── nested validation ──────────────────────────────────────────
+
+  describe("nested validation", function()
+    local _notify
+    local notifications
+
+    before_each(function()
+      _notify = vim.notify
+      notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+    end)
+
+    after_each(function()
+      vim.notify = _notify
+    end)
+
+    -- debug
+
+    it("rejects debug.level not in enum", function()
+      config.setup({ debug = { level = "trace" } })
+      assert.are.equal(1, #notifications)
+      assert.match("expected one of", notifications[1].msg)
+    end)
+
+    it("accepts valid debug.level", function()
+      config.setup({ debug = { level = "warn" } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    -- hover
+
+    it("rejects hover.debounce_ms as string", function()
+      config.setup({ hover = { debounce_ms = "fast" } })
+      assert.is_true(#notifications > 0)
+      assert.match("hover%.debounce_ms", notifications[1].msg)
+    end)
+
+    it("rejects hover.max_screen_fraction > 1", function()
+      config.setup({ hover = { max_screen_fraction = 1.5 } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected <= 1", notifications[1].msg)
+      assert.are.equal(vim.log.levels.WARN, notifications[1].level)
+    end)
+
+    it("accepts hover.max_screen_fraction = 1", function()
+      config.setup({ hover = { max_screen_fraction = 1 } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects negative hover.debounce_ms", function()
+      config.setup({ hover = { debounce_ms = -50 } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("accepts hover.images.enabled override", function()
+      config.setup({ hover = { images = { enabled = false } } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects hover.images.enabled wrong type", function()
+      config.setup({ hover = { images = { enabled = "yes" } } })
+      assert.is_true(#notifications > 0)
+      assert.match("enabled", notifications[1].msg)
+    end)
+
+    -- renderer_options.mermaid
+
+    it("rejects unknown mermaid renderer", function()
+      config.setup({ renderer_options = { mermaid = { renderer = "plantuml" } } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected mmdr", notifications[1].msg)
+    end)
+
+    it("accepts mmdc renderer", function()
+      config.setup({ renderer_options = { mermaid = { renderer = "mmdc" } } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects negative min_popup_width", function()
+      config.setup({ renderer_options = { mermaid = { min_popup_width = -10 } } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects mmdr.width as string", function()
+      config.setup({ renderer_options = { mermaid = { mmdr = { width = "wide" } } } })
+      assert.is_true(#notifications > 0)
+      assert.match("mmdr%.width", notifications[1].msg)
+    end)
+
+    it("rejects mmdc.scale out of range", function()
+      config.setup({ renderer_options = { mermaid = { mmdc = { scale = 5 } } } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected 1%-3", notifications[1].msg)
+    end)
+
+    it("accepts mmdc.scale = 2", function()
+      config.setup({ renderer_options = { mermaid = { mmdc = { scale = 2 } } } })
+      assert.are.equal(0, #notifications)
+    end)
+  end)
 end)
