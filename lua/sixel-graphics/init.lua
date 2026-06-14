@@ -177,7 +177,7 @@ function M.render_image_at_cursor(path, width_cells)
   local cursor = vim.api.nvim_win_get_cursor(0)
   local id = backend.render(path, cursor[2], cursor[1] - 1, width_cells, height_cells)
   if id then
-    vim.notify("Rendered: " .. id, vim.log.levels.INFO)
+    require("sixel-graphics.utils.logger").debug("Rendered: " .. id)
     return true
   end
   return false
@@ -188,7 +188,7 @@ end
 function M.clear_images()
   guard_setup()
   require("sixel-graphics.backends.sixel").clear()
-  vim.notify("Images cleared", vim.log.levels.INFO)
+  require("sixel-graphics.utils.logger").debug("Images cleared")
 end
 
 ---Accessor for the current config options.
@@ -209,7 +209,7 @@ end
 function M.enable()
   guard_setup()
   M.state.enabled = true
-  vim.notify("sixel-graphics: enabled", vim.log.levels.INFO)
+  require("sixel-graphics.utils.logger").debug("sixel-graphics: enabled")
 end
 
 ---Disable image rendering (hide images).
@@ -218,7 +218,7 @@ function M.disable()
   guard_setup()
   M.state.enabled = false
   close_active_popup()
-  vim.notify("sixel-graphics: disabled", vim.log.levels.INFO)
+  require("sixel-graphics.utils.logger").debug("sixel-graphics: disabled")
 end
 
 ---@private
@@ -354,8 +354,8 @@ function M.show_image_popup(image_path)
     is_rendered = true,
   }
 
-  vim.notify(
-    string.format(
+  require("sixel-graphics.utils.logger").debug(function()
+    return string.format(
       "sixel-graphics: popup %dx%d cells (%dx%d px), original %dx%d px",
       pw,
       ph,
@@ -363,9 +363,8 @@ function M.show_image_popup(image_path)
       pixel_h,
       dims.width,
       dims.height
-    ),
-    vim.log.levels.INFO
-  )
+    )
+  end)
 
   -- 7. Encode + send after floating window is painted.
   --    vim.schedule: runs in next event-loop iteration after Neovim
