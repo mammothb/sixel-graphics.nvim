@@ -1,4 +1,4 @@
----Unit tests for init.lua create_popup_for_diagram (D4.1 — mmdr sync path).
+---Unit tests for init.lua create_popup_for_diagram (mmdr sync + mmdc async).
 ---
 ---Mocks mermaid renderer, backends, term, magick to isolate the
 ---diagram → render → popup pipeline from filesystem/subprocess side effects.
@@ -56,7 +56,7 @@ package.loaded["sixel-graphics.integrations.markdown"] = {
 
 local M = require("sixel-graphics")
 
-describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
+describe("create_popup_for_diagram (mmdr sync)", function()
   local mermaid_mock
   local _notify
   local _win_is_valid
@@ -317,7 +317,7 @@ describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
     end)
   end)
 
-  -- ── mmdc async path (D4.3) ────────────────────────────────────
+  -- ── mmdc async path ────────────────────────────────────────────
 
   describe("mmdc async path", function()
     local _timer_start
