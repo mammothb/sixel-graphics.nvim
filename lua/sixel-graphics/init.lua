@@ -449,9 +449,21 @@ end
 
 -- Active popup state (single-popup: only one hover popup at a time)
 active_popup = nil -- { win: number, buf: number, image_id: string, path: string, source?: string }
-local active_diagram_job_id = nil -- mmdc job ID, nil if no async render in flight
+
+-- mmdc job currently rendering (nil if idle). Tracked separately from
+-- active_popup because during async rendering there is no popup yet —
+-- the popup only appears when mmdc completes. This field lets us
+-- detect "cursor moved away during loading" and silently discard
+-- the stale result (it's cached on disk; next hover is instant).
+local active_diagram_job_id = nil
+
 local popup_timer = nil -- vim.fn.timer_start handle for debounce
 local popup_in_progress = false -- guard against re-entrant create/destroy
+
+-- Tracks the cursor row from the previous on_cursor_moved invocation.
+-- When the cursor lands on the same row as an already-active popup,
+-- we skip the entire dispatch (image/diagram check + debounce) to
+-- avoid unnecessary work on every CursorMoved event within the same line.
 local prev_cursor_row = -1
 
 ---@private
@@ -482,8 +494,11 @@ close_active_popup = function()
 
   active_popup = nil
 
-  -- Reset guard after a short delay so BufEnter/WinClosed events during
-  -- cleanup don't trigger spurious re-renders.
+  -- Close triggers Neovim autocmds (BufEnter on the newly-focused
+  -- window, WinClosed for the popup). If on_cursor_moved fires from
+  -- those autocmds before popup_in_progress is cleared, it could
+  -- re-create the popup immediately. Defer the reset past the current
+  -- event-loop tick so those cascading autocmds see the guard.
   vim.defer_fn(function()
     popup_in_progress = false
   end, 50)
@@ -711,8 +726,8 @@ on_cursor_moved = function(buf)
   end
 
   local ft = vim.bo[buf].filetype
-  local supported = ((M.state.options or {}).hover or {}).filetypes or { "markdown" }
-  if not vim.tbl_contains(supported, ft) then
+  local hover = M.state.options.hover
+  if not vim.tbl_contains(hover.filetypes, ft) then
     -- Cursor left a supported buffer: close any active popup
     close_active_popup()
     return
@@ -735,8 +750,7 @@ on_cursor_moved = function(buf)
 
   -- ── IMAGE CHECK ────────────────────────────────────────────────
 
-  local img_opts = ((M.state.options or {}).hover or {}).images
-  if img_opts and img_opts.enabled ~= false then
+  if hover.images.enabled ~= false then
     local match = require("sixel-graphics.integrations.markdown").find_image_at_row(buf, cursor_row)
 
     if match then
@@ -760,7 +774,7 @@ on_cursor_moved = function(buf)
 
       -- Debounce: wait for cursor to settle before showing popup.
       -- Rapid cursor movement keeps cancelling the timer → no flicker.
-      local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
+      local debounce_ms = hover.debounce_ms
 
       require("sixel-graphics.utils.logger").debug(function()
         return "on_cursor_moved: debounce " .. debounce_ms .. "ms for " .. abs_path
@@ -779,8 +793,7 @@ on_cursor_moved = function(buf)
 
   -- ── DIAGRAM CHECK ─────────────────────────────────────────────
 
-  local diag_opts = ((M.state.options or {}).hover or {}).diagrams
-  if diag_opts and diag_opts.enabled ~= false then
+  if hover.diagrams.enabled ~= false then
     local diagram = require("sixel-graphics.integrations.markdown").find_diagram_at_row(buf, cursor_row)
 
     if diagram then
@@ -790,8 +803,8 @@ on_cursor_moved = function(buf)
         return
       end
 
-      local renderer_opts = ((M.state.options or {}).renderer_options or {}).mermaid or {}
-      local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
+      local renderer_opts = M.state.options.renderer_options.mermaid
+      local debounce_ms = hover.debounce_ms
 
       require("sixel-graphics.utils.logger").debug(function()
         return "on_cursor_moved: diagram debounce "
