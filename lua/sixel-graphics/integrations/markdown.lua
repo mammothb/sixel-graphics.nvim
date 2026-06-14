@@ -186,11 +186,6 @@ function M.query_buffer_diagrams(buf)
       if current_language then
         local source = vim.treesitter.get_node_text(node, buf)
 
-        -- Strip block quote prefixes from source text inside block quotes
-        if node:parent():parent() and node:parent():parent():type() == "block_quote" then
-          source = source:gsub("\n>", "\n"):gsub("^>", "")
-        end
-
         table.insert(diagrams, {
           renderer_id = current_language,
           source = source,
