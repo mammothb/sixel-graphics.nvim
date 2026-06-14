@@ -214,6 +214,11 @@ describe("config", function()
       assert.is_nil(mmdr.config_file)
     end)
 
+    it("min_popup_width defaults to 40", function()
+      config.setup()
+      assert.are.equal(40, config.options.renderer_options.mermaid.min_popup_width)
+    end)
+
     it("mmdc defaults are correct", function()
       config.setup()
       local mmdc = config.options.renderer_options.mermaid.mmdc
@@ -242,6 +247,7 @@ describe("config", function()
       assert.is_nil(m.mmdr.height) -- from default
       assert.is_false(m.mmdr.fast_text) -- from default
       assert.is_nil(m.mmdr.config_file) -- from default
+      assert.are.equal(40, m.min_popup_width) -- from default
       assert.are.equal("dark", m.mmdc.theme)
       assert.is_nil(m.mmdc.background) -- from default
       assert.is_nil(m.mmdc.scale) -- from default

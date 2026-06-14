@@ -159,7 +159,20 @@ describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
       M.create_popup_for_diagram(source, opts)
 
       assert.spy(popup_spy).was_called(1)
-      assert.spy(popup_spy).was_called_with("/cache/sixel-graphics/mermaid/hash123.png")
+      assert.spy(popup_spy).was_called_with("/cache/sixel-graphics/mermaid/hash123.png", nil)
+      popup_spy:revert()
+    end)
+
+    it("passes min_popup_width through to show_image_popup when configured", function()
+      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
+
+      local source = "flowchart LR\n    A --> B"
+      local opts = { renderer = "mmdr", min_popup_width = 60 }
+
+      M.create_popup_for_diagram(source, opts)
+
+      assert.spy(popup_spy).was_called(1)
+      assert.spy(popup_spy).was_called_with("/cache/sixel-graphics/mermaid/hash123.png", { min_width_cells = 60 })
       popup_spy:revert()
     end)
 
@@ -247,7 +260,7 @@ describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
 
       M.create_popup_for_diagram(source, opts)
 
-      assert.spy(popup_spy).was_called_with("/cache/sixel-graphics/mermaid/hash123.png")
+      assert.spy(popup_spy).was_called_with("/cache/sixel-graphics/mermaid/hash123.png", nil)
       popup_spy:revert()
     end)
   end)
@@ -397,7 +410,7 @@ describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
       vim.wait(50, function() end)
 
       assert.spy(popup_spy).was_called(1)
-      assert.spy(popup_spy).was_called_with("/cache/mermaid/abc123.png")
+      assert.spy(popup_spy).was_called_with("/cache/mermaid/abc123.png", nil)
       popup_spy:revert()
     end)
 
@@ -491,7 +504,7 @@ describe("create_popup_for_diagram — D4.1 (mmdr sync)", function()
       mermaid_mock._last_callback("/cache/second.png")
       vim.wait(50, function() end)
       assert.spy(popup_spy).was_called(1)
-      assert.spy(popup_spy).was_called_with("/cache/second.png")
+      assert.spy(popup_spy).was_called_with("/cache/second.png", nil)
       popup_spy:revert()
     end)
   end)

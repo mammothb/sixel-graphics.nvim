@@ -312,7 +312,7 @@ end
 ---@param image_path string  Absolute path to the image file
 ---@return number|nil win    Floating window handle, nil on failure
 ---@return string|nil image_id  Image id for tracking/cleanup
-function M.show_image_popup(image_path)
+function M.show_image_popup(image_path, popup_opts)
   guard_setup()
 
   if not M.state.enabled then
@@ -361,6 +361,16 @@ function M.show_image_popup(image_path)
   if ph > max_h then
     pw = math.floor(pw * max_h / ph + 0.5)
     ph = max_h
+  end
+
+  -- Enforce minimum popup width (diagrams auto-size to content, can be tiny).
+  -- Clamped to max_w so the minimum cannot exceed screen/configured bounds.
+  if popup_opts and popup_opts.min_width_cells then
+    local min_w = math.min(popup_opts.min_width_cells, max_w)
+    if pw < min_w then
+      ph = math.floor(ph * min_w / pw + 0.5)
+      pw = min_w
+    end
   end
 
   -- Minimum size so the window + border is visible
@@ -573,6 +583,10 @@ function M.create_popup_for_diagram(source, renderer_opts)
 
   local renderer_name = renderer_opts and renderer_opts.renderer or "mmdr"
   local mermaid = require("sixel-graphics.renderers.mermaid")
+  local popup_opts = renderer_opts
+      and renderer_opts.min_popup_width
+      and { min_width_cells = renderer_opts.min_popup_width }
+    or nil
 
   -- ── mmdc path ────────────────────────────────────────────────
 
@@ -600,7 +614,7 @@ function M.create_popup_for_diagram(source, renderer_opts)
         -- Close any popup that appeared in the meantime
         close_active_popup()
 
-        local win, image_id = M.show_image_popup(path)
+        local win, image_id = M.show_image_popup(path, popup_opts)
         if win then
           active_popup = {
             win = win,
@@ -624,7 +638,7 @@ function M.create_popup_for_diagram(source, renderer_opts)
     if result.file_path then
       logger.debug("create_popup_for_diagram: mmdc cache hit")
 
-      local win, image_id = M.show_image_popup(result.file_path)
+      local win, image_id = M.show_image_popup(result.file_path, popup_opts)
       if not win then
         logger.debug("create_popup_for_diagram: show_image_popup returned nil")
         return false
@@ -671,7 +685,7 @@ function M.create_popup_for_diagram(source, renderer_opts)
   end
 
   -- Show the rendered PNG in a floating window
-  local win, image_id = M.show_image_popup(result.file_path)
+  local win, image_id = M.show_image_popup(result.file_path, popup_opts)
   if not win then
     logger.debug("create_popup_for_diagram: show_image_popup returned nil")
     return false

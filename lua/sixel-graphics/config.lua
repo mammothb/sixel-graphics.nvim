@@ -38,6 +38,7 @@ M.defaults = {
   renderer_options = {
     mermaid = {
       renderer = "mmdr", -- "mmdr" (native Rust, 2-6ms) | "mmdc" (Node.js/Chromium, 1-5s)
+      min_popup_width = 40, -- minimum popup width in cells (diagrams auto-size to content, enforce floor)
       mmdr = {
         width = nil, -- nil | number (px, mmdr -w flag, default 1200)
         height = nil, -- nil | number (px, mmdr -H flag, default 800)
