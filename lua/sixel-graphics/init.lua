@@ -66,7 +66,7 @@ function M.setup(opts)
   if hover_opts then
     local group = vim.api.nvim_create_augroup("SixelGraphicsHover", { clear = true })
 
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    vim.api.nvim_create_autocmd({ "CursorMoved" }, {
       group = group,
       callback = function(args)
         if not M.state.enabled then
@@ -754,6 +754,13 @@ on_cursor_moved = function(buf)
   -- Skip if a popup operation is already in progress (prevent re-entrancy
   -- from autocmds firing during window create/destroy).
   if popup_in_progress then
+    return
+  end
+
+  -- Only show popups in normal mode. The ModeChanged autocmd closes
+  -- any active popup when entering insert/visual; this guard prevents
+  -- re-creation until returning to normal mode.
+  if vim.fn.mode(true) ~= "n" then
     return
   end
 
