@@ -67,7 +67,9 @@ return setmetatable(M, {
     if rawget(M, "options") == nil then
       M.setup()
     end
-    local options = rawget(M, "options")
-    return options[key]
+    if key == "options" then
+      return rawget(M, "options")
+    end
+    return rawget(M, "options")[key]
   end,
 })

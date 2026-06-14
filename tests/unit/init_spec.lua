@@ -1,4 +1,4 @@
----Tests for init.lua state machine: guard_setup error,
+---Tests for init.lua state machine: ensure_init lazy fallback,
 ---enable/disable/is_enabled transitions, clear_images delegation.
 
 -- Pre-load mocks to prevent side effects during init.lua loading
@@ -36,20 +36,22 @@ package.loaded["sixel-graphics.config"] = {
 local M = require("sixel-graphics")
 
 describe("init", function()
-  describe("guard_setup", function()
+  describe("ensure_init (lazy init)", function()
     it("does not throw when state exists", function()
       M.state = { enabled = true, images = {}, options = {} }
-      -- clear_images uses guard_setup
       assert.has_no.errors(function()
         M.clear_images()
       end)
     end)
 
-    it("throws error when state is nil", function()
+    it("auto-initializes when state is nil instead of throwing", function()
       M.state = nil
-      assert.has.errors(function()
+      M._initialized = nil
+      assert.has_no.errors(function()
         M.clear_images()
       end)
+      -- ensure_init should have called _init() and created state
+      assert.is_not_nil(M.state)
     end)
   end)
 
