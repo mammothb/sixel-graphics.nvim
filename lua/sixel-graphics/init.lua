@@ -786,6 +786,7 @@ on_cursor_moved = function(buf)
     if diagram then
       -- If the same diagram is already showing, don't recreate
       if active_popup and active_popup.source == diagram.source then
+        require("sixel-graphics.utils.logger").debug("on_cursor_moved: same diagram, skipping")
         return
       end
 
@@ -793,7 +794,12 @@ on_cursor_moved = function(buf)
       local debounce_ms = ((M.state.options or {}).hover or {}).debounce_ms or 150
 
       require("sixel-graphics.utils.logger").debug(function()
-        return "on_cursor_moved: diagram debounce " .. debounce_ms .. "ms"
+        return "on_cursor_moved: diagram debounce "
+          .. debounce_ms
+          .. "ms"
+          .. " ["
+          .. diagram.source:gsub("\n", "\\n"):sub(1, 60)
+          .. "]"
       end)
 
       popup_timer = vim.fn.timer_start(debounce_ms, function()
