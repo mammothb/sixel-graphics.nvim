@@ -1,12 +1,7 @@
 ---ImageMagick CLI processor: auto-detection and basic image operations.
----All operations use synchronous vim.fn.system() for simplicity during development.
----Async vim.loop.spawn() pipeline comes in later steps.
+---All operations use synchronous vim.fn.system().
 ---@class MagickCliProcessor
 local M = {}
-
-----------------------------------------------------------------------
--- Phase 2.1: ImageMagick auto-detection
-----------------------------------------------------------------------
 
 -- Version 7: single "magick" binary for all operations
 -- Version 6: separate "convert" and "identify" binaries
@@ -48,10 +43,6 @@ function M.has_v6()
   return has_convert and has_identify
 end
 
-----------------------------------------------------------------------
--- Phase 2.2: get_format
-----------------------------------------------------------------------
-
 ---Returns the image format as a lowercase string: "png", "jpeg", "gif", etc.
 ---Uses identify -format %m (v6) or magick identify -format %m (v7).
 ---@param path string  Absolute or relative path to image file
@@ -92,10 +83,6 @@ function M.get_format(path)
   end
   return format
 end
-
-----------------------------------------------------------------------
--- Phase 2.3: get_dimensions
-----------------------------------------------------------------------
 
 ---Returns pixel dimensions of an image.
 ---Uses identify -format %wx%h (v6) or magick identify -format %wx%h (v7).
@@ -150,10 +137,6 @@ function M.get_dimensions(path)
 
   return { width = tonumber(w), height = tonumber(h) }
 end
-
-----------------------------------------------------------------------
--- Phase 2.4: encode_to_sixel
-----------------------------------------------------------------------
 
 -- Shell-escape a path for use inside single-quoted string.
 -- Escapes embedded single quotes: ' → '\''

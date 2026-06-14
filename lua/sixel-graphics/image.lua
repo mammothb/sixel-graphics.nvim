@@ -1,6 +1,5 @@
 ---Minimal Image class stub.
 ---Holds the fields the backend needs; not the full image.nvim Image.
----Full lifecycle methods (:render(), :clear(), :move()) come in Step 6.
 ---@class Image
 ---@field id string           Unique identifier
 ---@field path string          Absolute path to image file

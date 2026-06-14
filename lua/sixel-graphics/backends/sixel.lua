@@ -203,10 +203,6 @@ function M.send_test_sixel_at_cursor()
   M.send_test_sixel(col, row)
 end
 
-----------------------------------------------------------------------
--- Phase 3.2: setup() + render()
-----------------------------------------------------------------------
-
 ---Initialize the sixel backend with a shared state table.
 ---Called once by the plugin setup process.
 ---@param state table  Shared state: { images: table }
@@ -316,16 +312,9 @@ function M.render(image_path, x, y, width_cells, height_cells)
   return image_id
 end
 
-----------------------------------------------------------------------
--- Phase 3.3: clear()
-----------------------------------------------------------------------
-
 ---Clear rendered images from the terminal.
----Sixel images are persistent on screen until overwritten by terminal redraw.
----Clearing removes them from our tracking state. A future frame paint
----(Step 6+) will repaint the screen without them.
----For now, the terminal will overwrite the sixel region on next redraw
----(scroll, mode change, Ctrl-L).
+---Sixel images persist on screen until overwritten by terminal redraw
+---(scroll, mode change, Ctrl-L). Clearing removes them from tracking state.
 ---@param image_id? string  Specific image to clear, or nil to clear all
 function M.clear(image_id)
   if not M.state then

@@ -21,7 +21,7 @@ end
 ---
 ---@param opts Config?
 
--- Forward declarations: defined later in Phase 6.4 section
+-- Forward declarations: used in setup() before their definitions below
 local on_cursor_moved
 local close_active_popup
 local active_popup
@@ -235,10 +235,6 @@ function M.disable()
   vim.notify("sixel-graphics: disabled", vim.log.levels.INFO)
 end
 
-----------------------------------------------------------------------
--- Phase 6.1: Floating window terminal positioning
-----------------------------------------------------------------------
-
 ---@private
 ---Compute the absolute terminal (col, row) for a floating window's content area.
 ---The content area is the region inside the border where we want sixels to appear.
@@ -270,8 +266,8 @@ local function floating_win_term_origin(win)
 end
 
 ---Create a floating window at cursor and render a hardcoded sixel test pattern
----inside it. Phase 6.1 verification: proves sixel can render at the correct
----terminal position within a floating window.
+---inside it. Verifies sixel can render at the correct terminal position
+---within a floating window.
 ---
 ---Usage:
 ---```vim
@@ -323,10 +319,6 @@ function M.show_test_popup()
 
   return win, buf
 end
-
-----------------------------------------------------------------------
--- Phase 6.2: Render real image inside floating window
-----------------------------------------------------------------------
 
 ---Show an image in a floating popup window at the cursor position.
 ---The window is sized to fit the image while preserving aspect ratio,
@@ -480,10 +472,6 @@ function M.show_image_popup(image_path)
   return win, image_id
 end
 
-----------------------------------------------------------------------
--- Phase 6.3: Cursor tracking + hover detection
-----------------------------------------------------------------------
-
 ---Check if the cursor is currently on a line with a markdown image.
 ---Prints the image URL to :messages. For manual verification.
 function M.check_cursor_on_image()
@@ -535,10 +523,6 @@ function M.stop_hover_debug()
   pcall(vim.api.nvim_del_augroup_by_name, "SixelGraphicsHoverDebug")
   vim.notify("sixel-graphics: hover debug disabled", vim.log.levels.INFO)
 end
-
-----------------------------------------------------------------------
--- Phase 6.4: Popup lifecycle
-----------------------------------------------------------------------
 
 -- Active popup state (single-popup: only one hover popup at a time)
 active_popup = nil -- { win: number, buf: number, image_id: string, path: string }
