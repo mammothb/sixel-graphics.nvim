@@ -1,0 +1,8 @@
+#:schema https://www.schemastore.org/prek.json
+
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "stylua", name = "stylua", language = "system", entry = "stylua", files = "\\.lua$", pass_filenames = true },
+  { id = "selene", name = "selene", language = "system", entry = "selene", files = "\\.lua$", pass_filenames = true },
+]
