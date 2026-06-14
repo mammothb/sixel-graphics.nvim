@@ -2,6 +2,8 @@
 ---@class SixelBackend
 local M = {}
 
+local logger = require("sixel-graphics.utils.logger")
+
 -- Backend state (set during setup)
 M.state = nil
 
@@ -101,6 +103,7 @@ end
 ---@param y? number  Terminal row (0-indexed). If nil, renders at current cursor.
 function M.send_sixel(sixel_data, x, y)
   if not sixel_data or #sixel_data == 0 then
+    logger.warn("send_sixel: empty data, skipped")
     return
   end
 
@@ -115,6 +118,17 @@ function M.send_sixel(sixel_data, x, y)
     -- so the outer terminal cursor lands at the correct position.
     if M.is_tmux() then
       local px, py = M.get_tmux_pane_offset()
+      logger.debug(function()
+        return string.format(
+          "send_sixel: tmux pane_offset=(%d,%d), local=(%d,%d), outer=(%d,%d)",
+          px,
+          py,
+          x,
+          y,
+          x + px,
+          y + py
+        )
+      end)
       x = x + px
       y = y + py
     end
@@ -127,11 +141,22 @@ function M.send_sixel(sixel_data, x, y)
 
   -- Inside tmux: wrap the entire inner sequence in passthrough
   -- so cursor positioning and sixel both target the outer terminal.
-  if M.is_tmux() then
+  local using_tmux_wrap = M.is_tmux()
+  if using_tmux_wrap then
     inner = tmux_wrap(inner)
   end
 
   -- Send via stderr (does not modify buffer contents)
+  logger.debug(function()
+    return string.format(
+      "send_sixel: %d raw bytes → %d wrapped bytes, pos=(%d,%d), tmux_wrap=%s",
+      #sixel_data,
+      #inner,
+      x or -1,
+      y or -1,
+      tostring(using_tmux_wrap)
+    )
+  end)
   vim.fn.chansend(vim.v.stderr, inner)
 end
 
@@ -141,20 +166,48 @@ end
 function M.setup(state)
   M.state = state
 
-  -- Validate ImageMagick
-  if vim.fn.executable("magick") == 0 and vim.fn.executable("convert") == 0 then
-    vim.notify("sixel-graphics: ImageMagick not found. Install ImageMagick with sixel support.", vim.log.levels.ERROR)
-    return
-  end
+  logger.debug("sixel backend setup() called")
+
+  -- Log terminal environment
+  logger.debug(function()
+    return string.format(
+      "env: TERM=%s, TMUX=%s, TERM_PROGRAM=%s",
+      vim.env.TERM or "nil",
+      vim.env.TMUX and "set" or "nil",
+      vim.env.TERM_PROGRAM or "nil"
+    )
+  end)
 
   -- Check tmux passthrough
-  if M.is_tmux() and not M.tmux_has_passthrough() then
-    vim.notify(
-      "sixel-graphics: running inside tmux but allow-passthrough is off. "
-        .. "Enable it with: tmux set allow-passthrough on",
-      vim.log.levels.ERROR
-    )
+  if M.is_tmux() then
+    logger.info("detected tmux")
+    local has_passthrough = M.tmux_has_passthrough()
+    local has_sixel = M.tmux_has_sixel_feature()
+    logger.debug(function()
+      return string.format("tmux: passthrough=%s, sixel_feature=%s", tostring(has_passthrough), tostring(has_sixel))
+    end)
+    if not has_passthrough then
+      logger.warn("tmux allow-passthrough is off — sixel output will not reach terminal")
+      vim.notify(
+        "sixel-graphics: running inside tmux but allow-passthrough is off. "
+          .. "Enable it with: tmux set allow-passthrough on",
+        vim.log.levels.ERROR
+      )
+    end
   end
+
+  -- Validate ImageMagick
+  if vim.fn.executable("magick") == 0 and vim.fn.executable("convert") == 0 then
+    logger.error("ImageMagick not found (magick/convert missing)")
+    vim.notify("sixel-graphics: ImageMagick not found. Install ImageMagick with sixel support.", vim.log.levels.ERROR)
+  else
+    logger.info(function()
+      local ver = require("sixel-graphics.processors.magick_cli").version()
+      return string.format("ImageMagick available: %s", ver or "unknown version")
+    end)
+  end
+
+  logger.info("sixel backend initialized")
 end
 
 ---Render an image file at the given cell position and dimensions.
@@ -167,7 +220,19 @@ end
 ---@param height_cells number Height in character cells
 ---@return string|nil image_id  Unique id if rendered successfully, nil on failure
 function M.render(image_path, x, y, width_cells, height_cells)
+  logger.debug(function()
+    return string.format(
+      "render: path=%s cells=(%d,%d)@(%d,%d)",
+      vim.fn.fnamemodify(image_path, ":t"),
+      width_cells,
+      height_cells,
+      x,
+      y
+    )
+  end)
+
   if not M.state then
+    logger.error("render: backend state not initialized")
     vim.notify(
       "sixel-graphics: backend not set up. Call require('sixel-graphics').setup() first.",
       vim.log.levels.ERROR
@@ -177,6 +242,7 @@ function M.render(image_path, x, y, width_cells, height_cells)
 
   local term_size = require("sixel-graphics.utils.term").get_size()
   if not term_size or not term_size.cell_width then
+    logger.error("render: cannot determine terminal cell size")
     vim.notify("sixel-graphics: cannot determine terminal cell size", vim.log.levels.ERROR)
     return nil
   end
@@ -219,12 +285,31 @@ function M.render(image_path, x, y, width_cells, height_cells)
   -- Vertical offset (rows below the logical position)
   y = y + (opts.y_offset or 0)
 
+  logger.debug(function()
+    return string.format(
+      "render: target px=(%d,%d), cell=(%.1f,%.1f), scale=%.2f, sps=%.2f",
+      pixel_w,
+      pixel_h,
+      term_size.cell_width,
+      term_size.cell_height,
+      scale,
+      sps
+    )
+  end)
+
   -- Encode via ImageMagick
   local proc = require("sixel-graphics.processors.magick_cli")
   local sixel_data = proc.encode_to_sixel(image_path, pixel_w, pixel_h)
   if not sixel_data then
+    logger.error(function()
+      return "render: encode_to_sixel failed for " .. vim.fn.fnamemodify(image_path, ":t")
+    end)
     return nil
   end
+
+  logger.debug(function()
+    return string.format("render: encoded %d bytes of sixel data", #sixel_data)
+  end)
 
   -- Send to terminal
   M.send_sixel(sixel_data, x, y)
@@ -241,6 +326,10 @@ function M.render(image_path, x, y, width_cells, height_cells)
     is_rendered = true,
   }
 
+  logger.info(function()
+    return string.format("render: done id=%s", image_id)
+  end)
+
   return image_id
 end
 
@@ -254,13 +343,22 @@ function M.clear(image_id)
   end
 
   if image_id then
+    logger.debug(function()
+      return string.format("clear: single image id=%s, existed=%s", image_id, tostring(M.state.images[image_id] ~= nil))
+    end)
     local img = M.state.images[image_id]
     if img then
       img.is_rendered = false
       M.state.images[image_id] = nil
     end
   else
-    -- Clear all
+    local count = 0
+    for _ in pairs(M.state.images) do
+      count = count + 1
+    end
+    logger.debug(function()
+      return string.format("clear: all images, count=%d", count)
+    end)
     for _, img in pairs(M.state.images) do
       img.is_rendered = false
     end

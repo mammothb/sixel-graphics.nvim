@@ -3,6 +3,8 @@
 ---@class PathUtils
 local M = {}
 
+local logger = require("sixel-graphics.utils.logger")
+
 ---Resolve an image path found in a markdown file to an absolute filesystem path.
 ---Handles:
 ---  - Absolute paths: /foo/bar.png → /foo/bar.png (returned as-is)
@@ -12,21 +14,32 @@ local M = {}
 ---@param image_path string         Image URL as written in the markdown (may be relative)
 ---@return string  Absolute path to the resolved image file
 function M.resolve_image_path(buffer_file_path, image_path)
+  local result
+
   -- Absolute path: return as-is
   if string.sub(image_path, 1, 1) == "/" then
-    return image_path
-  end
-
+    result = image_path
   -- Home-relative: expand ~
-  if string.sub(image_path, 1, 1) == "~" then
-    return vim.fn.fnamemodify(image_path, ":p")
+  elseif string.sub(image_path, 1, 1) == "~" then
+    result = vim.fn.fnamemodify(image_path, ":p")
+  else
+    -- Relative path: join with markdown file's directory, then normalize
+    local document_dir = vim.fn.fnamemodify(buffer_file_path, ":h")
+    local absolute = document_dir .. "/" .. image_path
+    absolute = vim.fn.fnamemodify(absolute, ":p")
+    result = vim.fs.normalize(absolute)
   end
 
-  -- Relative path: join with markdown file's directory, then normalize
-  local document_dir = vim.fn.fnamemodify(buffer_file_path, ":h")
-  local absolute = document_dir .. "/" .. image_path
-  absolute = vim.fn.fnamemodify(absolute, ":p")
-  return vim.fs.normalize(absolute)
+  logger.debug(function()
+    return string.format(
+      "resolve_image_path: '%s' + '%s' → '%s'",
+      vim.fn.fnamemodify(buffer_file_path, ":t"),
+      image_path,
+      result
+    )
+  end)
+
+  return result
 end
 
 return M

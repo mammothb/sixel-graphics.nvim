@@ -4,6 +4,8 @@
 ---@class TermSize
 local M = {}
 
+local logger = require("sixel-graphics.utils.logger")
+
 local cached_size = nil
 
 ---Call TIOCGWINSZ ioctl to get terminal dimensions.
@@ -39,6 +41,7 @@ local update_size = function()
 
   local sz = ffi.new("winsize")
   if ffi.C.ioctl(1, TIOCGWINSZ, sz) ~= 0 then
+    logger.debug("update_size: ioctl TIOCGWINSZ failed (non-terminal?)")
     return -- non-terminal environment, keep previous
   end
 
@@ -48,6 +51,13 @@ local update_size = function()
   -- Fallback when pixel dimensions unavailable (SSH, some tty)
   -- Default: 8px wide × 16px tall per cell
   if xpixel == 0 or ypixel == 0 then
+    logger.debug(function()
+      return string.format(
+        "update_size: pixel dimensions unavailable from ioctl (got %dx%d px), using fallback 8x16 per cell",
+        xpixel,
+        ypixel
+      )
+    end)
     xpixel = sz.col * 8
     ypixel = sz.row * 16
   end
@@ -60,6 +70,18 @@ local update_size = function()
     cell_width = xpixel / sz.col,
     cell_height = ypixel / sz.row,
   }
+
+  logger.info(function()
+    return string.format(
+      "term size: %dx%d cells, %dx%d px, cell=%dx%d px",
+      sz.col,
+      sz.row,
+      xpixel,
+      ypixel,
+      cached_size.cell_width,
+      cached_size.cell_height
+    )
+  end)
 end
 
 -- Compute once at module load, refresh on VimResized

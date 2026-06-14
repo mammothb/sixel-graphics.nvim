@@ -10,6 +10,8 @@
 ---@class MarkdownIntegration
 local M = {}
 
+local logger = require("sixel-graphics.utils.logger")
+
 ---Parse a markdown buffer via treesitter and return all image references.
 ---
 ---Handles two markdown image syntaxes:
@@ -27,6 +29,13 @@ function M.query_buffer_images(buf)
   -- Get the markdown treesitter parser
   local ok, parser = pcall(vim.treesitter.get_parser, buf, "markdown")
   if not ok or not parser then
+    logger.warn(function()
+      return string.format(
+        "query_buffer_images: no markdown parser for buffer %d (ft=%s)",
+        buf,
+        vim.bo[buf].filetype or "nil"
+      )
+    end)
     vim.notify("sixel-graphics: no markdown treesitter parser found for buffer " .. buf, vim.log.levels.WARN)
     return {}
   end
@@ -39,6 +48,7 @@ function M.query_buffer_images(buf)
   local inlines = parser:children()[inline_lang]
 
   if not inlines then
+    logger.debug("query_buffer_images: no markdown_inline tree found")
     return {}
   end
 
@@ -95,6 +105,9 @@ function M.query_buffer_images(buf)
   -- markdown_inline has its own per-tree iteration (not for_each_child)
   inlines:for_each_tree(get_inline_images)
 
+  logger.debug(function()
+    return string.format("query_buffer_images: buffer %d, found %d image(s)", buf, #images)
+  end)
   return images
 end
 
@@ -114,6 +127,9 @@ function M.find_image_at_row(buf, cursor_row)
 
   for _, img in ipairs(images) do
     if img.range.start_row <= cursor_row and cursor_row <= img.range.end_row then
+      logger.debug(function()
+        return string.format("find_image_at_row: row=%d hit url=%s", cursor_row, img.url)
+      end)
       return img
     end
   end

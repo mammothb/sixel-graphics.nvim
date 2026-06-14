@@ -29,6 +29,18 @@ local active_popup
 function M.setup(opts)
   require("sixel-graphics.config").setup(opts)
 
+  local logger = require("sixel-graphics.utils.logger")
+
+  -- Log config (redact file_path for privacy)
+  logger.info(function()
+    local config = require("sixel-graphics.config").options
+    local safe = vim.deepcopy(config)
+    if safe.debug and safe.debug.file_path then
+      safe.debug.file_path = "<set>"
+    end
+    return string.format("setup() called with opts: %s", vim.inspect(safe))
+  end)
+
   -- Initialize shared state
   M.state = {
     images = {},
@@ -36,6 +48,15 @@ function M.setup(opts)
     term_size = require("sixel-graphics.utils.term").get_size(),
     options = require("sixel-graphics.config").options,
   }
+
+  logger.info(function()
+    return string.format(
+      "state: enabled=%s, term_size=%dx%d cells",
+      tostring(M.state.enabled),
+      M.state.term_size and M.state.term_size.screen_cols or -1,
+      M.state.term_size and M.state.term_size.screen_rows or -1
+    )
+  end)
 
   -- Initialize backend
   require("sixel-graphics.backends.sixel").setup(M.state)
