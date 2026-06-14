@@ -10,15 +10,15 @@ describe("tmux detection", function()
   before_each(function()
     -- Default: no tmux, system returns empty
     vim.env.TMUX = nil
-    system_stub = nil
+    -- Save original vim.fn.system so after_each can restore it.
+    -- Individual tests override this with their own stubs.
+    system_stub = vim.fn.system
   end)
 
   after_each(function()
     vim.env.TMUX = nil
     -- Restore original system
-    if system_stub then
-      vim.fn.system = system_stub
-    end
+    vim.fn.system = system_stub
   end)
 
   describe("tmux_has_sixel_feature()", function()

@@ -4,6 +4,14 @@
 describe("mermaid renderer — integration (real mmdr)", function()
   local mermaid = require("sixel-graphics.renderers.mermaid")
 
+  -- Ensure cache directory exists before any test (belt-and-suspenders:
+  -- _get_cache_dir() creates it too, but if stdpath("cache") parent
+  -- chain is missing on some systems, this guarantees it upfront).
+  before_each(function()
+    local cache_dir = vim.fn.stdpath("cache") .. "/sixel-graphics/mermaid"
+    vim.fn.mkdir(cache_dir, "p")
+  end)
+
   it("renders a simple flowchart to a PNG file", function()
     local source = "flowchart LR\n    A[Start] --> B[End]"
 
