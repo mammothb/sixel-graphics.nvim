@@ -1,6 +1,11 @@
----Terminal cell size detection via TIOCGWINSZ ioctl (LuaJIT FFI).
----Provides pixel dimensions per character cell for cell↔pixel conversion.
+---Terminal cell size detection via TIOCGWINSZ ioctl (LuaJIT FFI) or
+---pure-Lua 5.1 fallback using vim.o.columns/vim.o.lines + hardcoded
+---cell pixel dimensions (10×20 px/cell).
 ---Result is cached; updates on VimResized.
+---
+---On non-LuaJIT Neovim builds, accurate cell pixel dimensions are
+---not available. Users can set cell_width_override / cell_height_override
+---in the plugin config to match their terminal's actual cell size.
 ---@class TermSize
 local M = {}
 
@@ -8,11 +13,20 @@ local logger = require("sixel-graphics.utils.logger")
 
 local cached_size = nil
 
+-- Probe FFI availability once at module load.
+-- LuaJIT builds have ffi; Lua 5.1 builds do not.
+local has_ffi, ffi_mod = pcall(require, "ffi")
+
 ---Call TIOCGWINSZ ioctl to get terminal dimensions.
+---Uses LuaJIT FFI when available; falls back to vim.o + hardcoded
+---cell pixel dimensions on pure-Lua 5.1 builds.
 ---Updates the cached_size table.
----@return table|nil
-local update_size = function()
-  local ffi = require("ffi")
+local update_size
+
+if has_ffi then
+  -- ── FFI path (LuaJIT): ioctl(TIOCGWINSZ) ──────────────────────
+  local ffi = ffi_mod
+
   ffi.cdef([[
     typedef struct {
       unsigned short row;
@@ -29,59 +43,93 @@ local update_size = function()
   elseif vim.fn.has("mac") == 1 or vim.fn.has("bsd") == 1 then
     TIOCGWINSZ = 0x40087468
   else
-    -- Unsupported OS: sensible defaults
+    TIOCGWINSZ = nil -- unsupported OS, fall through to defaults below
+  end
+
+  update_size = function()
+    if not TIOCGWINSZ then
+      -- Unsupported OS: sensible defaults
+      cached_size = {
+        screen_cols = vim.o.columns,
+        screen_rows = vim.o.lines,
+        cell_width = 10,
+        cell_height = 20,
+      }
+      return
+    end
+
+    local sz = ffi.new("winsize")
+    if ffi.C.ioctl(1, TIOCGWINSZ, sz) ~= 0 then
+      logger.debug("update_size: ioctl TIOCGWINSZ failed (non-terminal?)")
+      return -- non-terminal environment, keep previous
+    end
+
+    local xpixel = sz.xpixel
+    local ypixel = sz.ypixel
+
+    -- Fallback when pixel dimensions unavailable (SSH, some tty)
+    -- Default: 8px wide × 16px tall per cell
+    if xpixel == 0 or ypixel == 0 then
+      logger.debug(function()
+        return string.format(
+          "update_size: pixel dimensions unavailable from ioctl (got %dx%d px), using fallback 8x16 per cell",
+          xpixel,
+          ypixel
+        )
+      end)
+      xpixel = sz.col * 8
+      ypixel = sz.row * 16
+    end
+
+    cached_size = {
+      screen_x = xpixel,
+      screen_y = ypixel,
+      screen_cols = sz.col,
+      screen_rows = sz.row,
+      cell_width = xpixel / sz.col,
+      cell_height = ypixel / sz.row,
+    }
+
+    logger.info(function()
+      return string.format(
+        "term size: %dx%d cells, %dx%d px, cell=%dx%d px",
+        sz.col,
+        sz.row,
+        xpixel,
+        ypixel,
+        cached_size.cell_width,
+        cached_size.cell_height
+      )
+    end)
+  end
+else
+  -- ── Pure-Lua 5.1 path (no FFI): Neovim options + hardcoded cell px ──
+
+  -- Default cell pixel dimensions: 10×20 px.
+  -- Most terminals with a typical 12pt monospace font fall in the
+  -- 8–10 px wide × 16–20 px tall range.  Users who need precise sizing
+  -- can set cell_width_override / cell_height_override in the plugin config.
+  local DEFAULT_CELL_W = 10
+  local DEFAULT_CELL_H = 20
+
+  update_size = function()
     cached_size = {
       screen_cols = vim.o.columns,
       screen_rows = vim.o.lines,
-      cell_width = 10,
-      cell_height = 20,
+      cell_width = DEFAULT_CELL_W,
+      cell_height = DEFAULT_CELL_H,
     }
-    return
-  end
 
-  local sz = ffi.new("winsize")
-  if ffi.C.ioctl(1, TIOCGWINSZ, sz) ~= 0 then
-    logger.debug("update_size: ioctl TIOCGWINSZ failed (non-terminal?)")
-    return -- non-terminal environment, keep previous
-  end
-
-  local xpixel = sz.xpixel
-  local ypixel = sz.ypixel
-
-  -- Fallback when pixel dimensions unavailable (SSH, some tty)
-  -- Default: 8px wide × 16px tall per cell
-  if xpixel == 0 or ypixel == 0 then
-    logger.debug(function()
+    logger.info(function()
       return string.format(
-        "update_size: pixel dimensions unavailable from ioctl (got %dx%d px), using fallback 8x16 per cell",
-        xpixel,
-        ypixel
+        "term size (no FFI): %dx%d cells, cell=%dx%d px (default). Set cell_width_override / cell_height_override in config for accurate sizing.",
+        cached_size.screen_cols,
+        cached_size.screen_rows,
+        cached_size.cell_width,
+        cached_size.cell_height
       )
     end)
-    xpixel = sz.col * 8
-    ypixel = sz.row * 16
   end
-
-  cached_size = {
-    screen_x = xpixel,
-    screen_y = ypixel,
-    screen_cols = sz.col,
-    screen_rows = sz.row,
-    cell_width = xpixel / sz.col,
-    cell_height = ypixel / sz.row,
-  }
-
-  logger.info(function()
-    return string.format(
-      "term size: %dx%d cells, %dx%d px, cell=%dx%d px",
-      sz.col,
-      sz.row,
-      xpixel,
-      ypixel,
-      cached_size.cell_width,
-      cached_size.cell_height
-    )
-  end)
 end
 
 -- Compute once at module load, refresh on VimResized

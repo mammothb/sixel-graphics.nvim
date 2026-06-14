@@ -13,7 +13,6 @@
     "checkThirdParty": false
   },
   "diagnostics": {
-    "globals": [
-    ]
+    "globals": []
   }
 }
