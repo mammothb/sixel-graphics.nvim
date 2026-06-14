@@ -424,7 +424,7 @@ function M.show_image_popup(image_path)
 end
 
 -- Active popup state (single-popup: only one hover popup at a time)
-active_popup = nil -- { win: number, buf: number, image_id: string, path: string }
+active_popup = nil -- { win: number, buf: number, image_id: string, path: string, source?: string }
 local popup_timer = nil -- vim.fn.timer_start handle for debounce
 local popup_in_progress = false -- guard against re-entrant create/destroy
 local prev_cursor_row = -1
@@ -492,6 +492,72 @@ local function create_popup_for_image(image_path)
   }
 
   logger.debug("create_popup_for_image: done")
+  return true
+end
+
+---Render a mermaid diagram and show it in a floating popup.
+---Uses the configured renderer (mmdr or mmdc) to produce a PNG,
+---then delegates to show_image_popup() for display.
+---
+---D4.1: mmdr sync path only. mmdc async path added in D4.3.
+---
+---@param source string        Diagram source code
+---@param renderer_opts table  renderer_options.mermaid from config
+---@return boolean  True if popup was created
+function M.create_popup_for_diagram(source, renderer_opts)
+  guard_setup()
+
+  local logger = require("sixel-graphics.utils.logger")
+  logger.debug(function()
+    return "create_popup_for_diagram: " .. source:gsub("\n", "\\n"):sub(1, 80)
+  end)
+
+  if popup_in_progress then
+    logger.debug("create_popup_for_diagram: blocked")
+    return false
+  end
+
+  local mermaid = require("sixel-graphics.renderers.mermaid")
+  local result = mermaid.render(source, renderer_opts)
+
+  if not result then
+    -- mermaid.render already notified the user (renderer not installed / error)
+    logger.debug("create_popup_for_diagram: mermaid.render returned nil")
+    return false
+  end
+
+  if result.job_id then
+    -- mmdc async path — not implemented in D4.1
+    -- (D4.3 will handle this with an on_complete callback)
+    logger.debug("create_popup_for_diagram: mmdc async (job_id=" .. result.job_id .. ") not yet supported in D4.1")
+    vim.notify("sixel-graphics: mmdc async hover not yet implemented (D4.3)", vim.log.levels.WARN)
+    return false
+  end
+
+  if not result.file_path then
+    logger.debug("create_popup_for_diagram: result has no file_path")
+    return false
+  end
+
+  -- Close any existing popup first (enforce single-popup)
+  close_active_popup()
+
+  -- Show the rendered PNG in a floating window
+  local win, image_id = M.show_image_popup(result.file_path)
+  if not win then
+    logger.debug("create_popup_for_diagram: show_image_popup returned nil")
+    return false
+  end
+
+  active_popup = {
+    win = win,
+    buf = vim.api.nvim_win_get_buf(win),
+    image_id = image_id,
+    path = result.file_path,
+    source = source,
+  }
+
+  logger.debug("create_popup_for_diagram: done")
   return true
 end
 
