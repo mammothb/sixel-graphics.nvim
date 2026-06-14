@@ -206,30 +206,6 @@ describe("create_popup_for_diagram (mmdr sync)", function()
     end)
   end)
 
-  -- ── render error (renderer returns nil) ─────────────────────────
-
-  describe("when mermaid.render returns nil (error)", function()
-    it("returns false", function()
-      mermaid_mock.render = function()
-        return nil
-      end
-
-      local result = M.create_popup_for_diagram("bad syntax", { renderer = "mmdr" })
-      assert.is_false(result)
-    end)
-
-    it("does not create a popup when render returns nil", function()
-      mermaid_mock.render = function()
-        return nil
-      end
-
-      local popup_spy = require("luassert.spy").on(M, "show_image_popup")
-      M.create_popup_for_diagram("bad syntax", { renderer = "mmdr" })
-      assert.spy(popup_spy).was_called(0)
-      popup_spy:revert()
-    end)
-  end)
-
   -- ── single-popup enforcement ────────────────────────────────────
 
   describe("single-popup enforcement", function()

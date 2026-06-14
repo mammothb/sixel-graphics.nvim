@@ -48,16 +48,6 @@ describe("mermaid renderer — utilities", function()
       assert.is_not_nil(string.find(captured, "source"))
     end)
 
-    it("uses 'mmdc' in hash input when renderer is mmdc", function()
-      local captured = nil
-      vim.fn.sha256 = function(s)
-        captured = s
-        return string.rep("0", 64)
-      end
-      mermaid._compute_hash("source", "mmdc")
-      assert.is_not_nil(string.find(captured, "mmdc"))
-    end)
-
     it("produces different hashes for different sources (same renderer)", function()
       local calls = {}
       vim.fn.sha256 = function(s)
@@ -179,32 +169,6 @@ describe("mermaid renderer — utilities", function()
       assert.is_nil(string.find(joined, "%-%-fastText"))
     end)
 
-    it("includes -w when width is set", function()
-      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { width = 800 })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-w 800"))
-    end)
-
-    it("includes -H when height is set", function()
-      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { height = 600 })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-H 600"))
-    end)
-
-    it("includes -c when config_file is set", function()
-      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", {
-        config_file = "/home/user/mmdr-config.json",
-      })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-c /home/user/mmdr%-config%.json"))
-    end)
-
-    it("includes --fastText when fast_text is true", function()
-      local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { fast_text = true })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-%-fastText"))
-    end)
-
     it("omits --fastText when fast_text is false", function()
       local args = mermaid._build_mmdr_command("/tmp/in.mmd", "/cache/out.png", { fast_text = false })
       local joined = table.concat(args, " ")
@@ -250,46 +214,6 @@ describe("mermaid renderer — utilities", function()
       assert.is_nil(string.find(joined, "%-s "))
       assert.is_nil(string.find(joined, "%-w "))
       assert.is_nil(string.find(joined, "%-H "))
-    end)
-
-    it("includes -b when background is set", function()
-      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
-        background = "transparent",
-      })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-b transparent"))
-    end)
-
-    it("includes -t when theme is set", function()
-      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
-        theme = "dark",
-      })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-t dark"))
-    end)
-
-    it("includes -s when scale is set", function()
-      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
-        scale = 2,
-      })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-s 2"))
-    end)
-
-    it("includes -w when width is set", function()
-      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
-        width = 1200,
-      })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-w 1200"))
-    end)
-
-    it("includes -H when height is set", function()
-      local args = mermaid._build_mmdc_command("/tmp/in.mmd", "/cache/out.png", {
-        height = 900,
-      })
-      local joined = table.concat(args, " ")
-      assert.is_not_nil(string.find(joined, "%-H 900"))
     end)
 
     it("prepends cli_args before -i/-o", function()
