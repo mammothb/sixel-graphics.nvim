@@ -13,6 +13,50 @@ local M = {
 
 local logger = require("sixel-graphics.utils.logger")
 
+---@private
+---Compute a deterministic cache key from diagram source and renderer name.
+---Same source renders differently under mmdr vs mmdc, so include the
+---renderer name in the hash input to keep their caches separate.
+---@param source string        Diagram source code
+---@param renderer_name string  "mmdr" or "mmdc"
+---@return string  sha256 hex digest (64 characters)
+local function _compute_hash(source, renderer_name)
+  return vim.fn.sha256(renderer_name .. ":" .. source)
+end
+M._compute_hash = _compute_hash
+
+---@private
+---Get or create the mermaid cache directory.
+---@return string  Absolute path to cache directory
+local function _get_cache_dir()
+  local dir = vim.fn.stdpath("cache") .. "/sixel-graphics/mermaid"
+  vim.fn.mkdir(dir, "p")
+  return dir
+end
+M._get_cache_dir = _get_cache_dir
+
+---@private
+---Get the full cache file path for a given hash.
+---@param hash string  sha256 hex digest
+---@return string  Absolute path to cached PNG file
+local function _get_cache_path(hash)
+  return _get_cache_dir() .. "/" .. hash .. ".png"
+end
+M._get_cache_path = _get_cache_path
+
+---@private
+---Check if a cached PNG exists for the given hash.
+---@param hash string  sha256 hex digest
+---@return string|nil  Path to cached PNG, or nil if not cached
+local function _check_cache(hash)
+  local path = _get_cache_path(hash)
+  if vim.fn.filereadable(path) == 1 then
+    return path
+  end
+  return nil
+end
+M._check_cache = _check_cache
+
 ---Render a mermaid diagram source to PNG.
 ---
 ---mmdr path (sync, implemented): hash → cache check → vim.fn.system() → file_path
