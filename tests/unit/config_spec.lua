@@ -278,4 +278,110 @@ describe("config", function()
       assert.are.equal(32, config.options.popup_render_delay_ms)
     end)
   end)
+
+  -- ── validation ──────────────────────────────────────────────────
+
+  describe("validation", function()
+    local _notify
+    local notifications
+
+    before_each(function()
+      _notify = vim.notify
+      notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+    end)
+
+    after_each(function()
+      vim.notify = _notify
+    end)
+
+    it("accepts valid config without errors", function()
+      config.setup({ scale = 2.0, max_width = 80 })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("accepts nil optional fields without errors", function()
+      config.setup({ max_width = nil, max_height = nil })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects wrong type for enabled", function()
+      config.setup({ enabled = "yes" })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.enabled:", notifications[1].msg)
+      assert.are.equal(vim.log.levels.ERROR, notifications[1].level)
+    end)
+
+    it("rejects wrong type for scale", function()
+      config.setup({ scale = "big" })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.scale:", notifications[1].msg)
+    end)
+
+    it("rejects negative scale", function()
+      config.setup({ scale = -0.5 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects zero scale", function()
+      config.setup({ scale = 0 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects negative max_width", function()
+      config.setup({ max_width = -5 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects non-integer max_width", function()
+      config.setup({ max_width = 3.5 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected integer", notifications[1].msg)
+    end)
+
+    it("rejects negative sixel_pixel_scale", function()
+      config.setup({ sixel_pixel_scale = -1 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects non-integer popup_render_delay_ms", function()
+      config.setup({ popup_render_delay_ms = 16.7 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected integer", notifications[1].msg)
+    end)
+
+    it("rejects negative cell_width_override", function()
+      config.setup({ cell_width_override = -8 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("accepts integer cell_width_override", function()
+      config.setup({ cell_width_override = 16 })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects debug as non-table", function()
+      config.setup({ debug = "on" })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.debug:", notifications[1].msg)
+    end)
+
+    it("rejects hover as non-table", function()
+      config.setup({ hover = true })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.hover:", notifications[1].msg)
+    end)
+
+    it("still sets options even when validation fails", function()
+      config.setup({ scale = -1 })
+      assert.are.equal(-1, config.options.scale) -- value is set, just warned
+    end)
+  end)
 end)

@@ -60,6 +60,57 @@ M.defaults = {
 ---@param opts Config?
 function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", {}, M.defaults, opts or {})
+
+  -- ── Validation ───────────────────────────────────────────────
+  local o = M.options
+  local prefix = "sixel-graphics"
+
+  local function check_positive(path, value)
+    if type(value) ~= "number" then
+      return
+    end
+    if value <= 0 then
+      vim.notify(prefix .. "." .. path .. ": expected > 0, got " .. tostring(value), vim.log.levels.ERROR)
+    end
+  end
+  local function check_positive_integer(path, value)
+    if value == nil then
+      return
+    end
+    if math.floor(value) ~= value then
+      vim.notify(prefix .. "." .. path .. ": expected integer, got " .. tostring(value), vim.log.levels.ERROR)
+    elseif value <= 0 then
+      vim.notify(prefix .. "." .. path .. ": expected > 0, got " .. tostring(value), vim.log.levels.ERROR)
+    end
+  end
+
+  -- Type checks (via vim.validate, wrapped in pcall)
+  local ok, verr = pcall(vim.validate, {
+    enabled = { o.enabled, "boolean" },
+    max_width = { o.max_width, "number", true },
+    max_height = { o.max_height, "number", true },
+    scale = { o.scale, "number" },
+    y_offset = { o.y_offset, "number" },
+    cell_width_override = { o.cell_width_override, "number", true },
+    cell_height_override = { o.cell_height_override, "number", true },
+    sixel_pixel_scale = { o.sixel_pixel_scale, "number" },
+    popup_render_delay_ms = { o.popup_render_delay_ms, "number" },
+    debug = { o.debug, "table" },
+    hover = { o.hover, "table" },
+    renderer_options = { o.renderer_options, "table" },
+  })
+  if not ok then
+    vim.notify(prefix .. "." .. verr, vim.log.levels.ERROR)
+  end
+
+  -- Range / integer checks (vim.validate can't express these)
+  check_positive("scale", o.scale)
+  check_positive("sixel_pixel_scale", o.sixel_pixel_scale)
+  check_positive_integer("max_width", o.max_width)
+  check_positive_integer("max_height", o.max_height)
+  check_positive_integer("cell_width_override", o.cell_width_override)
+  check_positive_integer("cell_height_override", o.cell_height_override)
+  check_positive_integer("popup_render_delay_ms", o.popup_render_delay_ms)
 end
 
 return setmetatable(M, {
