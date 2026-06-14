@@ -32,15 +32,16 @@ local active_popup
 ---@param opts Config?
 function M.setup(opts)
   require("sixel-graphics.config").setup(opts)
+  local new_opts = require("sixel-graphics.config").options
 
-  -- If already initialized, update state.options in-place so live
-  -- references (autocommand callbacks, etc.) pick up new config.
+  -- If already initialized, replace state.options with the freshly-merged
+  -- config table so callbacks reading M.state.options dynamically see new values.
   if M.state then
-    M.state.options = require("sixel-graphics.config").options
+    M.state.options = new_opts
   end
 
-  -- Auto-initialize on first setup() call (plugin/ entry point also
-  -- calls _init() directly; idempotent guard prevents double-init).
+  -- Auto-initialize on first call (plugin/ also calls _init() directly;
+  -- idempotent guard prevents double-init).
   M._init()
 end
 
