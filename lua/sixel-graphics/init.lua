@@ -100,6 +100,15 @@ function M.setup(opts)
         end
       end,
     })
+
+    -- Close popup when entering insert/visual mode (popup covers text being edited)
+    vim.api.nvim_create_autocmd({ "ModeChanged" }, {
+      group = group,
+      pattern = "*:i,*:v,*:V,*:\22",
+      callback = function()
+        close_active_popup()
+      end,
+    })
   end
 
   M.has_setup = true
