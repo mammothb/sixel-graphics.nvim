@@ -1,4 +1,4 @@
----Tests for init.lua state machine: guard_setup error,
+---Tests for init.lua state machine: ensure_init lazy fallback,
 ---enable/disable/is_enabled transitions, clear_images delegation.
 
 -- Pre-load mocks to prevent side effects during init.lua loading
@@ -36,26 +36,27 @@ package.loaded["sixel-graphics.config"] = {
 local M = require("sixel-graphics")
 
 describe("init", function()
-  describe("guard_setup", function()
-    it("does not throw when has_setup is true", function()
-      M.has_setup = true
-      -- clear_images uses guard_setup
+  describe("ensure_init (lazy init)", function()
+    it("does not throw when state exists", function()
+      M.state = { enabled = true, images = {}, options = {} }
       assert.has_no.errors(function()
         M.clear_images()
       end)
     end)
 
-    it("throws error when has_setup is false", function()
-      M.has_setup = false
-      assert.has.errors(function()
+    it("auto-initializes when state is nil instead of throwing", function()
+      M.state = nil
+      M._initialized = nil
+      assert.has_no.errors(function()
         M.clear_images()
       end)
+      -- ensure_init should have called _init() and created state
+      assert.is_not_nil(M.state)
     end)
   end)
 
   describe("enable / disable / is_enabled", function()
     before_each(function()
-      M.has_setup = true
       M.state = {
         enabled = true,
         images = {},
@@ -67,8 +68,8 @@ describe("init", function()
       assert.is_true(M.is_enabled())
     end)
 
-    it("is_enabled returns false when has_setup is false", function()
-      M.has_setup = false
+    it("is_enabled returns false when state is nil", function()
+      M.state = nil
       assert.is_false(M.is_enabled())
     end)
 
@@ -140,7 +141,6 @@ describe("init", function()
 
   describe("clear_images", function()
     before_each(function()
-      M.has_setup = true
       M.state = { enabled = true, images = {} }
     end)
 

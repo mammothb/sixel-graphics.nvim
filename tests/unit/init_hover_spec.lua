@@ -71,8 +71,7 @@ describe("init hover", function()
   before_each(function()
     _notify = vim.notify
 
-    -- Set up state so guard_setup passes
-    M.has_setup = true
+    -- Set up state for tests that need it
     M.state = {
       enabled = true,
       images = {},

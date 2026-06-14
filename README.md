@@ -23,13 +23,31 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "mammothb/sixel-graphics.nvim",
-  opts = {},
+  -- opts = {} is optional — plugin auto-initializes with defaults
 }
 ```
 
 ## Configuration
 
-These are the default values:
+`setup()` is optional — the plugin auto-initializes with defaults.
+Call it only to override settings:
+
+```lua
+require("sixel-graphics").setup({
+  scale = 0.5,
+  max_width = 80,
+})
+```
+
+Or use `vim.g` (Vimscript-compatible):
+
+```lua
+vim.g.sixel_graphics = {
+  scale = 0.5,
+}
+```
+
+All default values:
 
 ```lua
 require("sixel-graphics").setup({

@@ -58,7 +58,7 @@ local M = require("sixel-graphics")
 
 describe("public API — diagram functions", function()
   before_each(function()
-    M.has_setup = false -- thin wrappers, no state needed
+    M.state = nil -- thin wrappers, no state needed
   end)
 
   -- ── query_markdown_diagrams ────────────────────────────────────

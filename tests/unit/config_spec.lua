@@ -278,4 +278,261 @@ describe("config", function()
       assert.are.equal(32, config.options.popup_render_delay_ms)
     end)
   end)
+
+  -- ── validation ──────────────────────────────────────────────────
+
+  describe("validation", function()
+    local _notify
+    local notifications
+
+    before_each(function()
+      _notify = vim.notify
+      notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+    end)
+
+    after_each(function()
+      vim.notify = _notify
+    end)
+
+    it("accepts valid config without errors", function()
+      config.setup({ scale = 2.0, max_width = 80 })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("accepts nil optional fields without errors", function()
+      config.setup({ max_width = nil, max_height = nil })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects wrong type for enabled", function()
+      config.setup({ enabled = "yes" })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.enabled:", notifications[1].msg)
+      assert.are.equal(vim.log.levels.ERROR, notifications[1].level)
+    end)
+
+    it("rejects wrong type for scale", function()
+      config.setup({ scale = "big" })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.scale:", notifications[1].msg)
+    end)
+
+    it("rejects negative scale", function()
+      config.setup({ scale = -0.5 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects zero scale", function()
+      config.setup({ scale = 0 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects negative max_width", function()
+      config.setup({ max_width = -5 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects non-integer max_width", function()
+      config.setup({ max_width = 3.5 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected integer", notifications[1].msg)
+    end)
+
+    it("rejects negative sixel_pixel_scale", function()
+      config.setup({ sixel_pixel_scale = -1 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects non-integer popup_render_delay_ms", function()
+      config.setup({ popup_render_delay_ms = 16.7 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected integer", notifications[1].msg)
+    end)
+
+    it("rejects negative cell_width_override", function()
+      config.setup({ cell_width_override = -8 })
+      assert.are.equal(1, #notifications)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("accepts integer cell_width_override", function()
+      config.setup({ cell_width_override = 16 })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects debug as non-table", function()
+      config.setup({ debug = "on" })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.debug:", notifications[1].msg)
+    end)
+
+    it("rejects hover as non-table", function()
+      config.setup({ hover = true })
+      assert.are.equal(1, #notifications)
+      assert.match("sixel%-graphics%.hover:", notifications[1].msg)
+    end)
+
+    it("still sets options even when validation fails", function()
+      config.setup({ scale = -1 })
+      assert.are.equal(-1, config.options.scale) -- value is set, just warned
+    end)
+  end)
+
+  -- ── nested validation ──────────────────────────────────────────
+
+  describe("nested validation", function()
+    local _notify
+    local notifications
+
+    before_each(function()
+      _notify = vim.notify
+      notifications = {}
+      vim.notify = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+    end)
+
+    after_each(function()
+      vim.notify = _notify
+    end)
+
+    -- debug
+
+    it("rejects debug.level not in enum", function()
+      config.setup({ debug = { level = "trace" } })
+      assert.are.equal(1, #notifications)
+      assert.match("expected one of", notifications[1].msg)
+    end)
+
+    it("accepts valid debug.level", function()
+      config.setup({ debug = { level = "warn" } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    -- hover
+
+    it("rejects hover.debounce_ms as string", function()
+      config.setup({ hover = { debounce_ms = "fast" } })
+      assert.is_true(#notifications > 0)
+      assert.match("hover%.debounce_ms", notifications[1].msg)
+    end)
+
+    it("rejects hover.max_screen_fraction > 1", function()
+      config.setup({ hover = { max_screen_fraction = 1.5 } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected <= 1", notifications[1].msg)
+      assert.are.equal(vim.log.levels.WARN, notifications[1].level)
+    end)
+
+    it("accepts hover.max_screen_fraction = 1", function()
+      config.setup({ hover = { max_screen_fraction = 1 } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects negative hover.debounce_ms", function()
+      config.setup({ hover = { debounce_ms = -50 } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("accepts hover.images.enabled override", function()
+      config.setup({ hover = { images = { enabled = false } } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects hover.images.enabled wrong type", function()
+      config.setup({ hover = { images = { enabled = "yes" } } })
+      assert.is_true(#notifications > 0)
+      assert.match("enabled", notifications[1].msg)
+    end)
+
+    -- renderer_options.mermaid
+
+    it("rejects unknown mermaid renderer", function()
+      config.setup({ renderer_options = { mermaid = { renderer = "plantuml" } } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected mmdr", notifications[1].msg)
+    end)
+
+    it("accepts mmdc renderer", function()
+      config.setup({ renderer_options = { mermaid = { renderer = "mmdc" } } })
+      assert.are.equal(0, #notifications)
+    end)
+
+    it("rejects negative min_popup_width", function()
+      config.setup({ renderer_options = { mermaid = { min_popup_width = -10 } } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected > 0", notifications[1].msg)
+    end)
+
+    it("rejects mmdr.width as string", function()
+      config.setup({ renderer_options = { mermaid = { mmdr = { width = "wide" } } } })
+      assert.is_true(#notifications > 0)
+      assert.match("mmdr%.width", notifications[1].msg)
+    end)
+
+    it("rejects mmdc.scale out of range", function()
+      config.setup({ renderer_options = { mermaid = { mmdc = { scale = 5 } } } })
+      assert.is_true(#notifications > 0)
+      assert.match("expected 1%-3", notifications[1].msg)
+    end)
+
+    it("accepts mmdc.scale = 2", function()
+      config.setup({ renderer_options = { mermaid = { mmdc = { scale = 2 } } } })
+      assert.are.equal(0, #notifications)
+    end)
+  end)
+
+  -- ── unknown key detection ──────────────────────────────────────
+
+  describe("_find_unknown_keys", function()
+    it("returns empty for nil opts", function()
+      local keys = config._find_unknown_keys(nil)
+      assert.are.same({}, keys)
+    end)
+
+    it("returns empty for empty opts", function()
+      local keys = config._find_unknown_keys({})
+      assert.are.same({}, keys)
+    end)
+
+    it("returns empty for known key", function()
+      local keys = config._find_unknown_keys({ scale = 0.5 })
+      assert.are.same({}, keys)
+    end)
+
+    it("detects top-level typo", function()
+      local keys = config._find_unknown_keys({ max_widht = 80 })
+      assert.are.same({ "max_widht" }, keys)
+    end)
+
+    it("detects nested typo", function()
+      local keys = config._find_unknown_keys({ hover = { debounce_ms = 100, typpo = true } })
+      assert.are.same({ "hover.typpo" }, keys)
+    end)
+
+    it("detects multiple typos", function()
+      local keys = config._find_unknown_keys({ max_widht = 80, scale = 0.5, hover = { bad_key = 1 } })
+      assert.are.equal(2, #keys)
+      assert.is_true(vim.tbl_contains(keys, "max_widht"))
+      assert.is_true(vim.tbl_contains(keys, "hover.bad_key"))
+    end)
+
+    it("skips list-like tables (filetypes)", function()
+      local keys = config._find_unknown_keys({ hover = { filetypes = { "markdown", "asciidoc" } } })
+      assert.are.same({}, keys)
+    end)
+
+    it("handles unknown nested table", function()
+      local keys = config._find_unknown_keys({ unknown_table = { x = 1 } })
+      assert.are.same({ "unknown_table" }, keys)
+    end)
+  end)
 end)

@@ -1,16 +1,26 @@
 ---@class SixelGraphics
----@field has_setup boolean
 ---@field state table|nil
-local M = { has_setup = false, state = nil }
+local M = { state = nil }
 
 ---@private
-local function guard_setup()
-  if not M.has_setup then
-    error("sixel-graphics.nvim is not set up. Call require('sixel-graphics').setup() first.")
+---Ensure plugin is initialized before a public API call.
+---Calls _init() lazily if state is nil (e.g. plugin/ didn't run because
+---the user lazy-loads the module). Normally a no-op since plugin/ runs first.
+local function ensure_init()
+  if not M.state then
+    M._init()
   end
 end
 
----Setup sixel-graphics.nvim with optional configuration.
+-- Forward declarations: used in setup() before their definitions below
+local on_cursor_moved
+local close_active_popup
+local active_popup
+
+---Override default configuration.
+---Pure config merge — no side effects beyond updating the options table.
+---Safe to call before or after initialization. If called before _init(),
+---the merged config will be used when initialization runs.
 ---
 ---```lua
 ---require("sixel-graphics").setup({
@@ -20,14 +30,29 @@ end
 ---```
 ---
 ---@param opts Config?
-
--- Forward declarations: used in setup() before their definitions below
-local on_cursor_moved
-local close_active_popup
-local active_popup
-
 function M.setup(opts)
   require("sixel-graphics.config").setup(opts)
+  local new_opts = require("sixel-graphics.config").options
+
+  -- If already initialized, replace state.options with the freshly-merged
+  -- config table so callbacks reading M.state.options dynamically see new values.
+  if M.state then
+    M.state.options = new_opts
+  end
+
+  -- Auto-initialize on first call (plugin/ also calls _init() directly;
+  -- idempotent guard prevents double-init).
+  M._init()
+end
+
+---@private
+---Initialize plugin state, backend, and autocommands.
+---Idempotent: safe to call multiple times (second call is a no-op).
+---Called automatically by setup() and by plugin/sixel-graphics.lua.
+function M._init()
+  if M._initialized then
+    return
+  end
 
   local logger = require("sixel-graphics.utils.logger")
 
@@ -38,7 +63,7 @@ function M.setup(opts)
     if safe.debug and safe.debug.file_path then
       safe.debug.file_path = "<set>"
     end
-    return string.format("setup() called with opts: %s", vim.inspect(safe))
+    return string.format("_init() with config: %s", vim.inspect(safe))
   end)
 
   -- Initialize shared state
@@ -111,7 +136,7 @@ function M.setup(opts)
     })
   end
 
-  M.has_setup = true
+  M._initialized = true
 end
 
 ---Check whether the current terminal supports sixel.
@@ -193,7 +218,7 @@ end
 function M.render_image_at_cursor(path, width_cells)
   width_cells = width_cells or 40
 
-  guard_setup()
+  ensure_init()
 
   if not M.state.enabled then
     vim.notify("sixel-graphics: rendering is disabled. Call enable() or setup().", vim.log.levels.WARN)
@@ -231,7 +256,7 @@ end
 ---Clear all rendered images from tracking state.
 ---Sixel images persist on screen until terminal redraw (Ctrl-L, scroll, etc.).
 function M.clear_images()
-  guard_setup()
+  ensure_init()
   require("sixel-graphics.backends.sixel").clear()
   require("sixel-graphics.utils.logger").debug("Images cleared")
 end
@@ -247,12 +272,12 @@ end
 ---Check whether image rendering is currently enabled.
 ---@return boolean
 function M.is_enabled()
-  return not not (M.has_setup and M.state and M.state.enabled == true)
+  return not not (M.state and M.state.enabled == true)
 end
 
 ---Enable image rendering (show images).
 function M.enable()
-  guard_setup()
+  ensure_init()
   M.state.enabled = true
   require("sixel-graphics.utils.logger").debug("sixel-graphics: enabled")
 end
@@ -260,7 +285,7 @@ end
 ---Disable image rendering (hide images).
 ---Closes active popup and suppresses future hover rendering.
 function M.disable()
-  guard_setup()
+  ensure_init()
   M.state.enabled = false
   close_active_popup()
   require("sixel-graphics.utils.logger").debug("sixel-graphics: disabled")
@@ -313,7 +338,7 @@ end
 ---@return number|nil win    Floating window handle, nil on failure
 ---@return string|nil image_id  Image id for tracking/cleanup
 function M.show_image_popup(image_path, popup_opts)
-  guard_setup()
+  ensure_init()
 
   if not M.state.enabled then
     vim.notify("sixel-graphics: rendering is disabled", vim.log.levels.WARN)
@@ -565,7 +590,7 @@ end
 ---@param renderer_opts table  renderer_options.mermaid from config
 ---@return boolean  True if popup was created (or async job started)
 function M.create_popup_for_diagram(source, renderer_opts)
-  guard_setup()
+  ensure_init()
 
   local logger = require("sixel-graphics.utils.logger")
   logger.debug(function()
