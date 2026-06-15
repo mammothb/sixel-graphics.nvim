@@ -4,6 +4,12 @@
 local M = {}
 
 local logger = require("sixel-graphics.utils.logger")
+local cache = require("sixel-graphics.utils.cache")
+
+---@private
+---In-memory LRU cache for sixel data, keyed on path × dimensions.
+---Max 50 entries, evicts least-recently-used.
+local _sixel_cache = cache.new(50)
 
 -- Version 7: single "magick" binary for all operations
 -- Version 6: separate "convert" and "identify" binaries
@@ -224,6 +230,18 @@ function M.encode_to_sixel(path, width, height)
     return nil
   end
 
+  -- Check LRU cache before spawning ImageMagick
+  local w_label = width or "auto"
+  local h_label = height or "auto"
+  local cache_key = path .. ":" .. w_label .. "x" .. h_label
+  local cached = _sixel_cache:get(cache_key)
+  if cached then
+    logger.debug(function()
+      return string.format("encode_to_sixel: cache hit %s (%d bytes)", cache_key, #cached)
+    end)
+    return cached
+  end
+
   -- Determine the encoding command (v7: magick, v6: convert)
   local cmd_bin = has_magick and "magick" or "convert"
 
@@ -265,7 +283,19 @@ function M.encode_to_sixel(path, width, height)
   logger.debug(function()
     return string.format("encode_to_sixel: done, %d bytes", #output)
   end)
+
+  -- Cache the result for future use
+  _sixel_cache:set(cache_key, output)
+
   return output
 end
+
+---Clear the in-memory sixel data cache.
+function M.clear_cache()
+  _sixel_cache:clear()
+end
+
+-- Expose cache instance for tests and stats inspection
+M._sixel_cache = _sixel_cache
 
 return M
