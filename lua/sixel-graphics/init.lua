@@ -415,11 +415,77 @@ function M.show_image_popup(image_path, popup_opts)
   pw = math.max(pw, 5)
   ph = math.max(ph, 3)
 
+  -- ── Boundary-aware popup placement ───────────────────────────
+  -- Get cursor screen row (0-indexed). screenrow() handles wrapped lines
+  -- correctly, unlike manual buffer-line arithmetic.
+  local cursor_screen_row = vim.fn.screenrow() - 1
+
+  local R = term.screen_rows
+  local C = cursor_screen_row
+  local win_h = ph + 2 -- total window height: content + top/bottom borders
+
+  -- Space checks account for the full window height (borders included),
+  -- not just content rows. The window occupies win_h screen rows.
+  local below_ok = C + 1 + win_h - 1 < R -- window [C+1, C+win_h] fits
+  local above_ok = C - ph - 1 >= 0 -- window [C-ph-1, C] fits top
+
+  local row_offset
+  local placement_tier = nil
+
+  if below_ok then
+    row_offset = 1
+    placement_tier = "below+gap"
+  elseif above_ok then
+    row_offset = -(ph + 1)
+    placement_tier = "above+gap"
+  elseif win_h <= R then
+    -- Shift: window fits screen at full size but not with gaps.
+    -- Find the best start row that keeps window fully on screen.
+    if (R - C) >= C then
+      -- More room below: bottom-anchor, don't go past cursor
+      local S = math.max(0, R - win_h)
+      if S > C then
+        S = C
+      end
+      row_offset = S - C
+    else
+      -- More room above: top-anchor to cursor's ideal above position, clamp
+      local S = C - ph - 1
+      if S < 0 then
+        S = 0
+      end
+      if S + win_h - 1 >= R then
+        S = R - win_h
+      end
+      row_offset = S - C
+    end
+    placement_tier = "shift"
+  else
+    -- Scale down: image taller than screen minus borders
+    local old_ph = ph
+    ph = R - 2
+    pw = math.max(5, math.floor(pw * ph / old_ph + 0.5))
+    row_offset = -C
+    placement_tier = "scale"
+  end
+
+  require("sixel-graphics.utils.logger").debug(function()
+    return string.format(
+      "sixel-graphics: placement tier=%s row_offset=%d cursor=%d R=%d ph=%d win_h=%d",
+      placement_tier,
+      row_offset,
+      cursor_screen_row,
+      R,
+      ph,
+      win_h
+    )
+  end)
+
   -- Create floating window at cursor
   local buf = vim.api.nvim_create_buf(false, true)
   local win = vim.api.nvim_open_win(buf, false, {
     relative = "cursor",
-    row = 1,
+    row = row_offset,
     col = 0,
     width = pw,
     height = ph,
