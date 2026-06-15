@@ -136,6 +136,12 @@ function M._init()
     })
   end
 
+  -- User commands
+  vim.api.nvim_create_user_command("SixelGraphicsClearCache", function()
+    M.clear_cache()
+    vim.notify("sixel-graphics: cache cleared", vim.log.levels.INFO)
+  end, {})
+
   M._initialized = true
 end
 
@@ -259,6 +265,13 @@ function M.clear_images()
   ensure_init()
   require("sixel-graphics.backends.sixel").clear()
   require("sixel-graphics.utils.logger").debug("Images cleared")
+end
+
+---Clear the in-memory sixel data cache.
+---Next hover on any image will re-execute ImageMagick.
+function M.clear_cache()
+  require("sixel-graphics.processors.magick_cli").clear_cache()
+  require("sixel-graphics.utils.logger").debug("Sixel cache cleared")
 end
 
 ---Accessor for the current config options.
