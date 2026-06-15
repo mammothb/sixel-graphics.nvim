@@ -32,6 +32,7 @@ M.defaults = {
     images = { enabled = true }, -- show images on hover in markdown
     diagrams = { enabled = true }, -- show mermaid diagrams on hover
     debounce_ms = 150, -- delay before showing popup after cursor settles
+    reopen_debounce_ms = 500, -- delay before re-showing popup after movement within same source
     max_screen_fraction = 0.5, -- max fraction of screen the popup may occupy
     filetypes = { "markdown" }, -- filetypes to enable hover in
   },
@@ -141,6 +142,7 @@ function M.setup(opts)
   if type(hov) == "table" then
     local hok, herr = pcall(vim.validate, {
       debounce_ms = { hov.debounce_ms, "number" },
+      reopen_debounce_ms = { hov.reopen_debounce_ms, "number" },
       max_screen_fraction = { hov.max_screen_fraction, "number" },
       filetypes = { hov.filetypes, "table" },
       images = { hov.images, "table" },
@@ -150,6 +152,7 @@ function M.setup(opts)
       vim.notify(prefix .. ".hover." .. herr, vim.log.levels.ERROR)
     end
     check_positive_integer("hover.debounce_ms", hov.debounce_ms)
+    check_positive_integer("hover.reopen_debounce_ms", hov.reopen_debounce_ms)
     check_positive("hover.max_screen_fraction", hov.max_screen_fraction)
     if hov.max_screen_fraction ~= nil and type(hov.max_screen_fraction) == "number" and hov.max_screen_fraction > 1 then
       vim.notify(

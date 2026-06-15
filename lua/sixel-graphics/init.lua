@@ -574,11 +574,13 @@ local active_diagram_job_id = nil
 local popup_timer = nil -- vim.fn.timer_start handle for debounce
 local popup_in_progress = false -- guard against re-entrant create/destroy
 
--- Tracks the cursor row from the previous on_cursor_moved invocation.
--- When the cursor lands on the same row as an already-active popup,
+-- Tracks the cursor position from the previous on_cursor_moved invocation.
+-- When the cursor lands on the same position as an already-active popup,
 -- we skip the entire dispatch (image/diagram check + debounce) to
--- avoid unnecessary work on every CursorMoved event within the same line.
+-- avoid unnecessary work on every CursorMoved event at the same position.
 local prev_cursor_row = -1
+local prev_cursor_col = -1
+local current_source = nil -- { type = "image"|"diagram", path?: string, source?: string }
 
 ---@private
 ---Close the active hover popup (if any) and clear its sixel image.
@@ -878,12 +880,14 @@ on_cursor_moved = function(buf)
 
   local cursor = vim.api.nvim_win_get_cursor(0)
   local cursor_row = cursor[1] - 1
+  local cursor_col = cursor[2]
 
-  -- Same line as before with an active popup: nothing to do
-  if cursor_row == prev_cursor_row and active_popup then
+  -- Same position as before with an active popup: nothing to do
+  if cursor_row == prev_cursor_row and cursor_col == prev_cursor_col and active_popup then
     return
   end
   prev_cursor_row = cursor_row
+  prev_cursor_col = cursor_col
 
   -- Cancel any pending debounced popup
   if popup_timer then
@@ -910,14 +914,17 @@ on_cursor_moved = function(buf)
         return
       end
 
-      -- If the same image is already showing, don't recreate
-      if active_popup and active_popup.path == abs_path then
-        return
-      end
+      -- Close popup if visible (cursor moved within same source).
+      -- close_active_popup is a no-op when active_popup is nil.
+      close_active_popup()
 
-      -- Debounce: wait for cursor to settle before showing popup.
-      -- Rapid cursor movement keeps cancelling the timer → no flicker.
-      schedule_popup(hover.debounce_ms, "image", function()
+      -- Use longer debounce when still in the same source as before
+      -- (avoids flicker during continuous scroll within region).
+      local same_source = current_source and current_source.type == "image" and current_source.path == abs_path
+      current_source = { type = "image", path = abs_path }
+
+      local debounce_ms = same_source and hover.reopen_debounce_ms or hover.debounce_ms
+      schedule_popup(debounce_ms, "image", function()
         create_popup_for_image(abs_path)
       end)
       return
@@ -930,14 +937,16 @@ on_cursor_moved = function(buf)
     local diagram = require("sixel-graphics.integrations.markdown").find_diagram_at_row(buf, cursor_row)
 
     if diagram then
-      -- If the same diagram is already showing, don't recreate
-      if active_popup and active_popup.source == diagram.source then
-        require("sixel-graphics.utils.logger").debug("on_cursor_moved: same diagram, skipping")
-        return
-      end
+      close_active_popup()
+
+      local same_source = current_source
+        and current_source.type == "diagram"
+        and current_source.source == diagram.source
+      current_source = { type = "diagram", source = diagram.source }
 
       local renderer_opts = M.state.options.renderer_options.mermaid
-      schedule_popup(hover.debounce_ms, "diagram", function()
+      local debounce_ms = same_source and hover.reopen_debounce_ms or hover.debounce_ms
+      schedule_popup(debounce_ms, "diagram", function()
         M.create_popup_for_diagram(diagram.source, renderer_opts)
       end)
       return
@@ -947,6 +956,7 @@ on_cursor_moved = function(buf)
   -- ── NEITHER ───────────────────────────────────────────────────
 
   -- Cursor on neither image nor diagram: close popup immediately
+  current_source = nil
   close_active_popup()
 end
 
